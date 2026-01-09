@@ -22,7 +22,7 @@ connectDB();
 ========================= */
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://9011094cbd24.ngrok-free.app/'
+  'https://kadick-official-log-monitor-9cdf4c4d3c69.herokuapp.com'
   // 'https://app.kadickintegrated.com'
 ];
 
