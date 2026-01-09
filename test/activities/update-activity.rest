@@ -1,0 +1,19 @@
+### Update activity (Owner)
+PUT http://localhost:8000/api/v1/activities/69579cb50669e98abf01a81f
+Authorization: Bearer user_token_value_here
+Content-Type: application/json
+
+{
+  "timeInterval": "2026-01-02 10:00 to 18:00",
+  "description": "Updated description with more details"
+}
+
+### Update activity (Admin)
+PUT http://localhost:8000/api/v1/activities/69579cb50669e98abf01a81f
+Authorization: Bearer admin_token_value_here
+Content-Type: application/json
+
+{
+  "timeInterval": "2026-01-02 08:00 to 16:00",
+  "description": "Admin updated this activity"
+}

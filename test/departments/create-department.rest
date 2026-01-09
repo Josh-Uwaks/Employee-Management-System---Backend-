@@ -1,0 +1,20 @@
+### Create department (Admin only)
+POST http://localhost:8000/api/v1/departments
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWUyZWU0ZGJlZmIwYjQwM2VkODIzYSIsImlkX2NhcmQiOiJLRTE3NSIsInJvbGUiOiJTVVBFUl9BRE1JTiIsImlzQWRtaW4iOnRydWUsImlhdCI6MTc2Nzc4MDUxOCwiZXhwIjoxNzY3Nzg0MTE4fQ.wf7mM8Q9ibrLmcRZlgqTPkLAr4AyAUyjqU-EuTqLX5s
+Content-Type: application/json
+
+{
+  "name": "IT Department",
+  "code": "IT",
+  "description": ""
+}
+
+### Create department without name
+POST http://localhost:8000/api/v1/departments
+Authorization: Bearer admin_token_value_here
+Content-Type: application/json
+
+{
+  "code": "OPS",
+  "description": "Operations department"
+}

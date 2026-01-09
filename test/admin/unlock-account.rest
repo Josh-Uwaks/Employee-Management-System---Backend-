@@ -1,0 +1,26 @@
+### Unlock account (SUPER_ADMIN)
+POST http://localhost:8000/api/v1/auth/unlock-account
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWUyZWU0ZGJlZmIwYjQwM2VkODIzYSIsImlkX2NhcmQiOiJLRTE3NSIsInJvbGUiOiJTVVBFUl9BRE1JTiIsImlzQWRtaW4iOnRydWUsImlhdCI6MTc2Nzc4MzI1OCwiZXhwIjoxNzY3Nzg2ODU4fQ.Vdz9D3QujmtwK4_eDhr4CQ5re-ikDjre6E1Hxgol0hI
+Content-Type: application/json
+
+{
+  "id_card": "KE150"
+}
+
+### Unlock account (LINE_MANAGER - their staff)
+POST http://localhost:8000/api/v1/auth/unlock-account
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWUzOGY5ZTBjYWZjZDNiMDI3MzNlNCIsImlkX2NhcmQiOiJLRTE0MCIsInJvbGUiOiJMSU5FX01BTkFHRVIiLCJpc0FkbWluIjp0cnVlLCJpYXQiOjE3Njc3ODMxMjIsImV4cCI6MTc2Nzc4NjcyMn0.gtA74buKrMj0WbLfOIIGrPwGyg131SDt7LXjfIdyYDM
+Content-Type: application/json
+
+{
+  "id_card": "KE150"
+}
+
+### Unlock account (LINE_MANAGER - unauthorized - another manager)
+POST http://localhost:8000/api/v1/auth/unlock-account
+Authorization: Bearer staff_token_value_here
+Content-Type: application/json
+
+{
+  "id_card": "KE145"
+}

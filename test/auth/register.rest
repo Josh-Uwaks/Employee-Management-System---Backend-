@@ -1,0 +1,47 @@
+### Register User (SUCCESS)
+POST http://localhost:8000/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "id_card": "KE140",
+  "email": "Muhammed.m@kadickintegrated.com",
+  "password": "Password123!",
+  "first_name": "Muhammed",
+  "last_name": "Mijinyawa",
+  "region": "Lagos",
+  "branch": "HQ",
+  "department": "695e3320e0cafcd3b02733c3",
+  "position": "HR Manager",
+  "role": "LINE_MANAGER",
+  "reportsTo": ""
+}
+
+### Register User (DUPLICATE ID CARD)
+POST http://localhost:8000/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "id_card": "KE175",
+  "email": "another@company.com",
+  "password": "Password123!",
+  "first_name": "Jane",
+  "last_name": "Smith",
+  "region": "Lagos",
+  "branch": "HQ",
+  "department": "65a1b2c3d4e5f6a7b8c9d0e1",
+  "position": "Designer"
+}
+
+### Register User (INVALID ID FORMAT)
+POST http://localhost:8000/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "id_card": "INVALID123",
+  "email": "test@company.com",
+  "password": "Password123!",
+  "first_name": "Test",
+  "last_name": "User",
+  "region": "Lagos",
+  "branch": "HQ"
+}

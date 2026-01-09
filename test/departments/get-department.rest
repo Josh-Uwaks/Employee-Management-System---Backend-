@@ -1,0 +1,8 @@
+### Get all departments
+GET http://localhost:8000/api/v1/departments
+
+### Get active departments only
+GET http://localhost:8000/api/v1/departments?activeOnly=true
+
+### Get single department
+GET http://localhost:8000/api/v1/departments/695e2ee4dbefb0b403ed8235

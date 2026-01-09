@@ -1,0 +1,29 @@
+### Lock account (SUPER_ADMIN - any account)
+POST http://localhost:8000/api/v1/auth/lock-account
+Authorization: Bearer staff_token_value_here
+Content-Type: application/json
+
+{
+  "id_card": "KE196",
+  "reason": "Investigating activities"
+}
+
+### Lock account (LINE_MANAGER - their staff)
+POST http://localhost:8000/api/v1/auth/lock-account
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWUzNTE2ZTBjYWZjZDNiMDI3MzNkNCIsImlkX2NhcmQiOiJLRTE5NSIsInJvbGUiOiJMSU5FX01BTkFHRVIiLCJpc0FkbWluIjp0cnVlLCJpYXQiOjE3Njc3OTAwMjUsImV4cCI6MTc2Nzc5MzYyNX0.FXCk6pcxW0OFgUjoItx03we_gyl0fkcUqmPstmFCtnw
+Content-Type: application/json
+
+{
+  "id_card": "KE140",
+  "reason": "Performance issues"
+}
+
+### Lock account (LINE_MANAGER - unauthorized - another manager)
+POST http://localhost:8000/api/v1/auth/lock-account
+Authorization: Bearer staff_token_value_here
+Content-Type: application/json
+
+{
+  "id_card": "KE145",
+  "reason": "Trying unauthorized lock"
+}

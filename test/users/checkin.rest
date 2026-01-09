@@ -1,0 +1,29 @@
+### Self Check-in
+POST http://localhost:8000/api/v1/users/checkin
+Authorization: Bearer user_token_value_here
+Content-Type: application/json
+
+{
+  "region": "Lagos",
+  "branch": "HQ"
+}
+
+### Admin Check-in for another user
+POST http://localhost:8000/api/v1/users/695793ebcac261dff38180f5/checkin
+Authorization: Bearer admin_token_value_here
+Content-Type: application/json
+
+{
+  "region": "Lagos",
+  "branch": "Alimosho"
+}
+
+### Check-in with invalid region
+POST http://localhost:8000/api/v1/users/checkin
+Authorization: Bearer admin_token_value_here
+Content-Type: application/json
+
+{
+  "region": "InvalidRegion",
+  "branch": "HQ"
+}

@@ -1,0 +1,34 @@
+### Verify OTP (SUCCESS)
+POST http://localhost:8000/api/v1/auth/verify-otp
+Content-Type: application/json
+
+{
+  "id_card": "KE140",
+  "otp": "430019"
+}
+
+### Verify OTP (INVALID OTP)
+POST http://localhost:8000/api/v1/auth/verify-otp
+Content-Type: application/json
+
+{
+  "id_card": "KE175",
+  "otp": "000000"
+}
+
+### Resend OTP
+POST http://localhost:8000/api/v1/auth/resend-otp
+Content-Type: application/json
+
+{
+  "id_card": "KE175"
+}
+
+### Check OTP Status (Admin only)
+POST http://localhost:8000/api/v1/auth/check-otp-status
+Authorization: Bearer 
+Content-Type: application/json
+
+{
+  "id_card": "KE145"
+}

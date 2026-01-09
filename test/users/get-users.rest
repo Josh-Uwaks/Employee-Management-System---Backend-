@@ -1,0 +1,15 @@
+### Get all users (Admin only)
+GET http://localhost:8000/api/v1/users/
+Authorization: Bearer admin_token_value_here
+
+### Get users by location
+GET http://localhost:8000/api/v1/users/location?region=Lagos&branch=HQ
+Authorization: Bearer admin_token_value_here
+
+### Get single user
+GET http://localhost:8000/api/v1/users/695793ebcac261dff38180f5
+Authorization: Bearer admin_token_value_here
+
+### Get single user (UNAUTHORIZED - Regular user)
+GET http://localhost:8000/api/v1/users/695793ebcac261dff38180f5
+Authorization: Bearer user_token_value_here

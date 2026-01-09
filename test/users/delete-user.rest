@@ -1,0 +1,7 @@
+### Delete User (Admin only)
+DELETE http://localhost:8000/api/v1/users/6954237748aea160149edd77
+Authorization: Bearer admin_token_value_here
+
+### Delete User (UNAUTHORIZED - Regular user)
+DELETE http://localhost:8000/api/v1/users/6954237748aea160149edd77
+Authorization: Bearer user_token_value_here

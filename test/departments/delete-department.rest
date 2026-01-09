@@ -1,0 +1,3 @@
+### Delete department (Admin only)
+DELETE http://localhost:8000/api/v1/departments/65a1b2c3d4e5f6a7b8c9d0e1
+Authorization: Bearer admin_token_value_here

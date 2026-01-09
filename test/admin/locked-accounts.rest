@@ -1,0 +1,7 @@
+### Get all locked accounts (SUPER_ADMIN)
+GET http://localhost:8000/api/v1/auth/locked-accounts
+Authorization: Bearer admin_token_value_here
+
+### Get locked accounts (LINE_MANAGER)
+GET http://localhost:8000/api/v1/auth/locked-accounts
+Authorization: Bearer staff_token_value_here

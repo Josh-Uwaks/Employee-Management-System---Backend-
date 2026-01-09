@@ -1,0 +1,19 @@
+### Create daily activity (Staff)
+POST http://localhost:8000/api/v1/activities
+Authorization: Bearer user_token_value_here
+Content-Type: application/json
+
+{
+  "timeInterval": "2026-01-02 09:00 to 17:00",
+  "description": "Working on project features"
+}
+
+### Create activity with invalid date
+POST http://localhost:8000/api/v1/activities
+Authorization: Bearer user_token_value_here
+Content-Type: application/json
+
+{
+  "timeInterval": "invalid-date",
+  "description": "Test activity"
+}

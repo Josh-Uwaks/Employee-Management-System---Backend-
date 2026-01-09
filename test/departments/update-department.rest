@@ -1,0 +1,13 @@
+### Update department (Admin only)
+PUT http://localhost:8000/api/v1/departments/695e31a6e0cafcd3b02733aa
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWUyZWU0ZGJlZmIwYjQwM2VkODIzYSIsImlkX2NhcmQiOiJLRTE3NSIsInJvbGUiOiJTVVBFUl9BRE1JTiIsImlzQWRtaW4iOnRydWUsImlhdCI6MTc2Nzc4MDUxOCwiZXhwIjoxNzY3Nzg0MTE4fQ.wf7mM8Q9ibrLmcRZlgqTPkLAr4AyAUyjqU-EuTqLX5s
+Content-Type: application/json
+
+{
+  "name": "IT Department",
+  "description": "Updated description for IT"
+}
+
+### Toggle department status (Admin only)
+PATCH http://localhost:8000/api/v1/departments/695e31a6e0cafcd3b02733aa/toggle-status
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWUyZWU0ZGJlZmIwYjQwM2VkODIzYSIsImlkX2NhcmQiOiJLRTE3NSIsInJvbGUiOiJTVVBFUl9BRE1JTiIsImlzQWRtaW4iOnRydWUsImlhdCI6MTc2Nzc4MDUxOCwiZXhwIjoxNzY3Nzg0MTE4fQ.wf7mM8Q9ibrLmcRZlgqTPkLAr4AyAUyjqU-EuTqLX5s

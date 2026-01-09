@@ -1,0 +1,153 @@
+## Get all users (Admin only)
+GET http://localhost:8000/api/v1/users/
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc0Mjc4NTgsImV4cCI6MTc2NzQzMTQ1OH0.ykFe5I9NnPt8trKt51U3_wPPB8RcASxQw-yhExfRJFo
+
+### Get users by location (Admin only)
+GET http://localhost:8000/api/v1/users/location?region=Lagos&branch=HQ
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc0Mjc4NTgsImV4cCI6MTc2NzQzMTQ1OH0.ykFe5I9NnPt8trKt51U3_wPPB8RcASxQw-yhExfRJFo
+
+
+### Get single user
+GET http://localhost:8000/api/v1/users/695793ebcac261dff38180f5
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc0Mjc4NTgsImV4cCI6MTc2NzQzMTQ1OH0.ykFe5I9NnPt8trKt51U3_wPPB8RcASxQw-yhExfRJFo
+
+
+### Update user
+PUT http://localhost:8000/api/v1/users/695793ebcac261dff38180f5
+Authorization:  Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3NjczNjQ2MjYsImV4cCI6MTc2NzM2ODIyNn0.KtolMUVIHYihKtdDy0x8D8oRuKGCCyWeZOL5Jbg6HNI
+Content-Type: application/json
+
+{
+  "first_name": "Joshua",
+  "last_name": "Uwakwe",
+  "region": "Lagos",
+  "branch": "HQ"
+}
+
+### Checkin User
+POST http://localhost:8000/api/v1/users/checkin
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWNjMjUxODI3MjVmYTJjMjRiM2I4NyIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc3MjM4ODUsImV4cCI6MTc2NzcyNzQ4NX0.emtdYXLkU24jRCu0ltt49FzAW835i2l4EnvsGTN6CXc
+Content-Type: application/json
+
+{
+  "region": "Lagos",
+  "branch": "HQ"
+}
+
+### Checkin User (Admin)
+POST http://localhost:8000/api/v1/users/695793ebcac261dff38180f5/checkin
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc0Mjc4NTgsImV4cCI6MTc2NzQzMTQ1OH0.ykFe5I9NnPt8trKt51U3_wPPB8RcASxQw-yhExfRJFo
+Content-Type: application/json
+
+{
+  "region": "Lagos",
+  "branch": "HQ"
+}
+
+### Delete User
+DELETE http://localhost:8000/api/v1/users/6954237748aea160149edd77
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3NjczNjQ2MjYsImV4cCI6MTc2NzM2ODIyNn0.KtolMUVIHYihKtdDy0x8D8oRuKGCCyWeZOL5Jbg6HNI
+
+
+### Register User
+POST http://localhost:8000/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "id_card": "KE135",
+  "email": "devs@kadickintegrated.com",
+  "password": "JoshUwaks01@#",
+  "first_name": "Joshua",
+  "last_name": "Uwakwe",
+  "region": "Lagos",
+  "branch": "HQ"
+}
+
+### Login User
+POST http://localhost:8000/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "id_card":"KE175",
+  "password": "JoshUwaks01@#"
+}
+
+### Verify OTP
+POST http://localhost:8000/api/v1/auth/verify-otp
+Content-Type: application/json
+
+{
+  "id_card":"KE175",
+  "otp": "423625"
+}
+
+### Check OTP status (Admin only)
+POST http://localhost:8000/api/v1/auth/check-otp-status
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWNiYmVmZjc0NDIxZjExOWVkNjlkZSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc2ODYwNTMsImV4cCI6MTc2NzY4OTY1M30.oi0_nfPVqutxYLjX4jMpE0eM73Rj0d0hTvrwZ7lJp4Q
+Content-Type: application/json
+
+{
+  "id_card":"KE145"
+}
+
+### GET all Locked Accounts (Admin only)
+GET http://localhost:8000/api/v1/auth/locked-accounts
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWNjMjUxODI3MjVmYTJjMjRiM2I4NyIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc2ODc0NTcsImV4cCI6MTc2NzY5MTA1N30.5iHyt3f8jZQs-9W-UU_7KcZShoFlgPXZoH_tsyk3eXQ
+Content-Type: application/json
+
+### Unlock Account (Admin only)
+POST http://localhost:8000/api/v1/auth/unlock-account
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWNjMjUxODI3MjVmYTJjMjRiM2I4NyIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc2ODc0NTcsImV4cCI6MTc2NzY5MTA1N30.5iHyt3f8jZQs-9W-UU_7KcZShoFlgPXZoH_tsyk3eXQ
+Content-Type: application/json
+
+{
+  "id_card":"KE135"
+}
+
+
+### Lock Account (Admin only)
+POST http://localhost:8000/api/v1/auth/lock-account
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NWNjMjUxODI3MjVmYTJjMjRiM2I4NyIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc3MjM4ODUsImV4cCI6MTc2NzcyNzQ4NX0.emtdYXLkU24jRCu0ltt49FzAW835i2l4EnvsGTN6CXc
+Content-Type: application/json
+
+{
+  "id_card":"KE196",
+  "reason": "Investigating activities"
+}
+
+### Staff create activity
+POST http://localhost:8000/api/v1/activities
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3NjczNjQ2MjYsImV4cCI6MTc2NzM2ODIyNn0.KtolMUVIHYihKtdDy0x8D8oRuKGCCyWeZOL5Jbg6HNI
+Content-Type: application/json
+
+
+{
+  "timeInterval": "2026-1-2:09:00 to 17:00",
+  "description": "New Year modifications to the system"
+}
+
+### Get Activity today
+GET http://localhost:8000/api/v1/activities/today
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc0Mjc4NTgsImV4cCI6MTc2NzQzMTQ1OH0.ykFe5I9NnPt8trKt51U3_wPPB8RcASxQw-yhExfRJFo
+
+### Get all activities (Admin only)
+GET http://localhost:8000/api/v1/activities/all
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3NjczNjQ2MjYsImV4cCI6MTc2NzM2ODIyNn0.KtolMUVIHYihKtdDy0x8D8oRuKGCCyWeZOL5Jbg6HNI
+
+### Get my activities (Staff)
+GET http://localhost:8000/api/v1/activities?startDate=2026-01-01&endDate=2026-01-02
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3NjczNjQ2MjYsImV4cCI6MTc2NzM2ODIyNn0.KtolMUVIHYihKtdDy0x8D8oRuKGCCyWeZOL5Jbg6HNI
+
+### Update Daily Activity (Staff)
+PUT http://localhost:8000/api/v1/activities/69579cb50669e98abf01a81f
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc0Mjc4NTgsImV4cCI6MTc2NzQzMTQ1OH0.ykFe5I9NnPt8trKt51U3_wPPB8RcASxQw-yhExfRJFo
+Content-Type: application/json
+
+{
+  "timeInterval": "2026-1-2:10:00 to 18:00",
+  "description": "Updated New Year modifications to the system just made an update"
+}
+
+### GET Activity by user
+GET http://localhost:8000/api/v1/activities/user/695793ebcac261dff38180f5
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NTc5M2ViY2FjMjYxZGZmMzgxODBmNSIsImlkX2NhcmQiOiJLRTE3NSIsImlzQWRtaW4iOnRydWUsImlzX3N0YWZmIjp0cnVlLCJpYXQiOjE3Njc0Mjc4NTgsImV4cCI6MTc2NzQzMTQ1OH0.ykFe5I9NnPt8trKt51U3_wPPB8RcASxQw-yhExfRJFo
