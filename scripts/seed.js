@@ -45,12 +45,12 @@ const seedDatabase = async () => {
     
     const adminData = {
       id_card: 'KE175',
-      email: 'joshua.u@kadickinterated.com',
-      password: await bcrypt.hash('JoshUwaks01@#', 10),
-      first_name: 'Joshua',
-      last_name: 'Uwakwe',
-      region: 'Lagos',
-      branch: 'HQ',
+      email: '**************',
+      password: await bcrypt.hash('********', 10),
+      first_name: '*****',
+      last_name: '*****',
+      region: '*****',
+      branch: '**',
       department: department._id,
       position: 'System Administrator',
       role: 'SUPER_ADMIN',
@@ -63,8 +63,8 @@ const seedDatabase = async () => {
     // Check if admin already exists
     const existingAdmin = await User.findOne({ 
       $or: [
-        { id_card: 'KE175' },
-        { email: 'joshua.u@kadickintegrated.com' }
+        { id_card: '*****' },
+        { email: '*******' }
       ]
     });
 
