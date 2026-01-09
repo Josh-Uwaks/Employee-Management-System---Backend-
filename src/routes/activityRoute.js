@@ -4,7 +4,8 @@ const {
   createDailyActivity,
   getTodayActivities,
   getActivitiesByDateRange,
-  updateDailyAcitivty,
+  updateDailyActivity,
+  deleteDailyActivity,
   getAllActivities,
   getActivitiesByUser
 } = require('../controllers/activityController');
@@ -17,6 +18,149 @@ const {
   selfManagerOrSuperAdmin 
 } = require('../middleware/role.middleware');
 
+// Validation middleware
+const validate = require('../middleware/validate.middleware');
+const { body, query, param } = require('express-validator');
+
+// Validation rules
+const createActivityRules = [
+  body('timeInterval')
+    .trim()
+    .notEmpty().withMessage('Time interval is required')
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]\s*-\s*([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .withMessage('Time interval must be in format "HH:MM - HH:MM"'),
+  body('description')
+    .trim()
+    .notEmpty().withMessage('Description is required')
+    .isLength({ min: 3, max: 500 }).withMessage('Description must be between 3 and 500 characters'),
+  body('status')
+    .optional()
+    .isIn(['pending', 'ongoing', 'completed']).withMessage('Status must be pending, ongoing, or completed'),
+  body('category')
+    .optional()
+    .isIn(['work', 'meeting', 'training', 'break', 'other']).withMessage('Invalid category'),
+  body('priority')
+    .optional()
+    .isIn(['low', 'medium', 'high']).withMessage('Priority must be low, medium, or high')
+];
+
+const updateActivityRules = [
+  param('id')
+    .isMongoId().withMessage('Invalid activity ID format'),
+  body('timeInterval')
+    .optional()
+    .trim()
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]\s*-\s*([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .withMessage('Time interval must be in format "HH:MM - HH:MM"'),
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ min: 3, max: 500 }).withMessage('Description must be between 3 and 500 characters'),
+  body('status')
+    .optional()
+    .isIn(['pending', 'ongoing', 'completed']).withMessage('Status must be pending, ongoing, or completed'),
+  body('category')
+    .optional()
+    .isIn(['work', 'meeting', 'training', 'break', 'other']).withMessage('Invalid category'),
+  body('priority')
+    .optional()
+    .isIn(['low', 'medium', 'high']).withMessage('Priority must be low, medium, or high')
+];
+
+const dateRangeRules = [
+  query('startDate')
+    .notEmpty().withMessage('Start date is required')
+    .isISO8601().withMessage('Start date must be in valid ISO8601 format (YYYY-MM-DD)'),
+  query('endDate')
+    .notEmpty().withMessage('End date is required')
+    .isISO8601().withMessage('End date must be in valid ISO8601 format (YYYY-MM-DD)'),
+  query('status')
+    .optional()
+    .isIn(['pending', 'ongoing', 'completed']).withMessage('Status must be pending, ongoing, or completed'),
+  query('category')
+    .optional()
+    .isIn(['work', 'meeting', 'training', 'break', 'other']).withMessage('Invalid category')
+];
+
+const adminFiltersRules = [
+  query('date')
+    .optional()
+    .custom((value) => {
+      // Allow empty string or null
+      if (!value || value.trim() === '' || value === 'null' || value === 'undefined') {
+        return true;
+      }
+      // If value is provided, validate ISO8601 format
+      const iso8601Regex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!iso8601Regex.test(value)) {
+        throw new Error('Date must be in valid ISO8601 format (YYYY-MM-DD)');
+      }
+      return true;
+    }),
+  query('status')
+    .optional()
+    .custom((value) => {
+      // Allow empty string, 'all', or null
+      if (!value || value.trim() === '' || value === 'all' || value === 'null' || value === 'undefined') {
+        return true;
+      }
+      // If value is provided, validate it's one of the allowed values
+      const allowedValues = ['pending', 'ongoing', 'completed'];
+      if (!allowedValues.includes(value)) {
+        throw new Error('Status must be pending, ongoing, or completed');
+      }
+      return true;
+    }),
+  query('region')
+    .optional()
+    .custom((value) => {
+      // Allow empty string, 'all', or null
+      if (!value || value.trim() === '' || value === 'all' || value === 'null' || value === 'undefined') {
+        return true;
+      }
+      // If value is provided, validate length
+      if (value.length < 2 || value.length > 50) {
+        throw new Error('Region must be between 2 and 50 characters');
+      }
+      return true;
+    }),
+  query('branch')
+    .optional()
+    .custom((value) => {
+      // Allow empty string, 'all', or null
+      if (!value || value.trim() === '' || value === 'all' || value === 'null' || value === 'undefined') {
+        return true;
+      }
+      // If value is provided, validate length
+      if (value.length < 2 || value.length > 50) {
+        throw new Error('Branch must be between 2 and 50 characters');
+      }
+      return true;
+    }),
+  query('page')
+    .optional()
+    .isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100')
+];
+const userActivitiesRules = [
+  param('id')
+    .isMongoId().withMessage('Invalid user ID format'),
+  query('date')
+    .optional()
+    .isISO8601().withMessage('Date must be in valid ISO8601 format (YYYY-MM-DD)'),
+  query('status')
+    .optional()
+    .isIn(['pending', 'ongoing', 'completed']).withMessage('Status must be pending, ongoing, or completed'),
+  query('page')
+    .optional()
+    .isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100')
+];
+
 // Apply authentication to all routes
 router.use(authMiddleware);
 
@@ -25,174 +169,28 @@ router.use(authMiddleware);
 // ===========================
 
 // POST create daily activity (Self only)
-router.post('/', createDailyActivity);
+router.post('/', createActivityRules, validate, createDailyActivity);
 
 // GET today's activities (Self only)
 router.get('/today', getTodayActivities);
 
 // GET activities by date range (Self only)
-router.get('/', getActivitiesByDateRange);
+router.get('/', dateRangeRules, validate, getActivitiesByDateRange);
 
 // PUT update daily activity (Self only - own activities)
-router.put('/:id', updateDailyAcitivty);
+router.put('/:id', updateActivityRules, validate, updateDailyActivity);
+
+// DELETE activity (Self only - own activities)
+router.delete('/:id', deleteDailyActivity);
 
 // ===========================
 // ADMIN ACTIVITY ROUTES
 // ===========================
 
 // GET all activities (Admin only - with filters)
-router.get('/all', isAdmin, getAllActivities);
+router.get('/all', isAdmin, adminFiltersRules, validate, getAllActivities);
 
 // GET activities by user (Admin only - for specific users)
-// Authorization: Self, Manager of staff, or SUPER_ADMIN
-router.get('/user/:id', selfManagerOrSuperAdmin, getActivitiesByUser);
-
-// ===========================
-// MANAGER-SPECIFIC ROUTES
-// ===========================
-
-// GET activities for staff under manager (LINE_MANAGER only)
-// router.get('/manager/staff-activities', isLineManager, async (req, res) => {
-//   try {
-//     // Get staff members who report to this manager
-//     const staffMembers = await User.find({ 
-//       reportsTo: req.user._id,
-//       is_active: true 
-//     }).select('_id id_card first_name last_name');
-    
-//     const staffIds = staffMembers.map(staff => staff._id);
-    
-//     // Get activities for these staff members
-//     const activities = await DailyActivity.find({
-//       user: { $in: staffIds },
-//       date: { 
-//         $gte: new Date(new Date().setDate(new Date().getDate() - 7)), // Last 7 days
-//         $lte: new Date()
-//       }
-//     })
-//     .populate('user', 'id_card first_name last_name')
-//     .sort({ date: -1, createdAt: 1 });
-    
-//     res.json({
-//       success: true,
-//       count: activities.length,
-//       staffCount: staffMembers.length,
-//       data: {
-//         staffMembers,
-//         activities
-//       }
-//     });
-//   } catch (error) {
-//     console.error('Manager staff activities error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Server error'
-//     });
-//   }
-// });
-
-// // GET team activity summary (LINE_MANAGER or SUPER_ADMIN)
-// router.get('/team/summary', isAdmin, async (req, res) => {
-//   try {
-//     const { startDate, endDate } = req.query;
-    
-//     let dateFilter = {};
-//     if (startDate && endDate) {
-//       const start = new Date(startDate);
-//       const end = new Date(endDate);
-//       end.setHours(23, 59, 59, 999);
-//       dateFilter.date = { $gte: start, $lte: end };
-//     } else {
-//       // Default: last 30 days
-//       const start = new Date();
-//       start.setDate(start.getDate() - 30);
-//       dateFilter.date = { $gte: start, $lte: new Date() };
-//     }
-    
-//     // Get user IDs based on role
-//     let userIds = [];
-    
-//     if (req.user.role === 'LINE_MANAGER') {
-//       // Get staff who report to this manager
-//       const staff = await User.find({ 
-//         reportsTo: req.user._id,
-//         is_active: true 
-//       }).select('_id');
-//       userIds = staff.map(user => user._id);
-//     } else if (req.user.role === 'SUPER_ADMIN') {
-//       // Get all active users
-//       const users = await User.find({ is_active: true }).select('_id');
-//       userIds = users.map(user => user._id);
-//     }
-    
-//     if (userIds.length === 0) {
-//       return res.json({
-//         success: true,
-//         count: 0,
-//         summary: {
-//           totalActivities: 0,
-//           completed: 0,
-//           pending: 0,
-//           inProgress: 0,
-//           byUser: []
-//         }
-//       });
-//     }
-    
-//     dateFilter.user = { $in: userIds };
-    
-//     const activities = await DailyActivity.find(dateFilter)
-//       .populate('user', 'id_card first_name last_name role')
-//       .select('user status date');
-    
-//     // Calculate summary
-//     const summary = {
-//       totalActivities: activities.length,
-//       completed: activities.filter(a => a.status === 'completed').length,
-//       pending: activities.filter(a => a.status === 'pending').length,
-//       inProgress: activities.filter(a => a.status === 'in-progress').length,
-//       byUser: []
-//     };
-    
-//     // Group by user
-//     const userMap = new Map();
-//     activities.forEach(activity => {
-//       const userId = activity.user._id.toString();
-//       if (!userMap.has(userId)) {
-//         userMap.set(userId, {
-//           user: {
-//             id: activity.user._id,
-//             id_card: activity.user.id_card,
-//             name: `${activity.user.first_name} ${activity.user.last_name}`,
-//             role: activity.user.role
-//           },
-//           total: 0,
-//           completed: 0,
-//           pending: 0,
-//           inProgress: 0
-//         });
-//       }
-      
-//       const userStats = userMap.get(userId);
-//       userStats.total++;
-//       if (activity.status === 'completed') userStats.completed++;
-//       if (activity.status === 'pending') userStats.pending++;
-//       if (activity.status === 'in-progress') userStats.inProgress++;
-//     });
-    
-//     summary.byUser = Array.from(userMap.values());
-    
-//     res.json({
-//       success: true,
-//       summary
-//     });
-//   } catch (error) {
-//     console.error('Team activity summary error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Server error'
-//     });
-//   }
-// });
+router.get('/user/:id', selfManagerOrSuperAdmin, userActivitiesRules, validate, getActivitiesByUser);
 
 module.exports = router;

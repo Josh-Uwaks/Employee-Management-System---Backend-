@@ -8,7 +8,7 @@ const dailyActivitySchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      required: [true, 'User ID is required'],
       index: true
     },
 
@@ -22,23 +22,46 @@ const dailyActivitySchema = new mongoose.Schema(
         d.setHours(0, 0, 0, 0);
         return d;
       },
-      index: true
+      index: true,
+      validate: {
+        validator: function(date) {
+          return date <= new Date();
+        },
+        message: 'Activity date cannot be in the future'
+      }
     },
 
     timeInterval: {
       type: String,
-      required: true // e.g. "09:00 - 10:30"
+      required: [true, 'Time interval is required'],
+      validate: {
+        validator: function(interval) {
+          // Validate format "HH:MM - HH:MM"
+          const regex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]\s*-\s*([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+          if (!regex.test(interval)) return false;
+          
+          // Validate start time is before end time
+          const [start, end] = interval.split('-').map(t => t.trim());
+          return start < end;
+        },
+        message: 'Time interval must be in format "HH:MM - HH:MM" with start time before end time'
+      }
     },
 
     description: {
       type: String,
-      required: true,
-      trim: true
+      required: [true, 'Description is required'],
+      trim: true,
+      minlength: [3, 'Description must be at least 3 characters'],
+      maxlength: [500, 'Description cannot exceed 500 characters']
     },
 
     status: {
       type: String,
-      enum: ['pending', 'ongoing', 'completed'],
+      enum: {
+        values: ['pending', 'ongoing', 'completed'],
+        message: 'Status must be either "pending", "ongoing", or "completed"'
+      },
       default: 'pending'
     }
   },
@@ -47,5 +70,9 @@ const dailyActivitySchema = new mongoose.Schema(
     versionKey: false
   }
 );
+
+// Compound index for better query performance
+dailyActivitySchema.index({ user: 1, date: 1 });
+dailyActivitySchema.index({ date: 1, status: 1 });
 
 module.exports = mongoose.model('DailyActivity', dailyActivitySchema);
