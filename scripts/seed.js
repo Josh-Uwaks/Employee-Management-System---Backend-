@@ -44,7 +44,7 @@ const seedDatabase = async () => {
     console.log('\n👑 Creating Super Admin user...');
     
     const adminData = {
-      id_card: 'KE175',
+      id_card: '****',
       email: '**************',
       password: await bcrypt.hash('********', 10),
       first_name: '*****',
