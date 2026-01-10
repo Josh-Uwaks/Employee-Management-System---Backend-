@@ -361,7 +361,11 @@ const getAllActivities = async (req, res) => {
 
     console.log('Query params received:', { date, status, region, branch, page, limit });
 
-    const filter = {};
+    // START: Always filter out activities with null or non-existent users
+    const filter = {
+      user: { $exists: true, $ne: null } // ← CRITICAL FIX
+    };
+    // END
 
     // Date filter - handle empty string gracefully
     if (date && date.trim() !== '' && date !== 'null' && date !== 'undefined') {
@@ -399,49 +403,62 @@ const getAllActivities = async (req, res) => {
     }
 
     // Only query users if we have filters
-    const users = Object.keys(userFilter).length
-      ? await User.find(userFilter).select('_id')
-      : null;
-
-    if (users && users.length > 0) {
-      filter.user = { $in: users.map(u => u._id) };
-    } else if (users && users.length === 0) {
-      // If we have filters but no users match, return empty result
-      return res.status(200).json({
-        success: true,
-        message: 'No activities found',
-        filters: {
-          date: date || 'All dates',
-          status: status || 'All statuses',
-          region: region || 'All regions',
-          branch: branch || 'All branches'
-        },
-        stats: {
-          total: 0,
-          byStatus: { pending: 0, ongoing: 0, completed: 0 },
-          byRegion: {},
-          byBranch: {}
-        },
-        count: 0,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          totalPages: 0,
-          totalItems: 0
-        },
-        data: []
-      });
+    let userIds = null;
+    if (Object.keys(userFilter).length > 0) {
+      const users = await User.find(userFilter).select('_id');
+      if (users && users.length > 0) {
+        userIds = users.map(u => u._id);
+        filter.user = { $in: userIds }; // Override the previous filter
+      } else if (users && users.length === 0) {
+        // If we have filters but no users match, return empty result
+        return res.status(200).json({
+          success: true,
+          message: 'No activities found',
+          filters: {
+            date: date || 'All dates',
+            status: status || 'All statuses',
+            region: region || 'All regions',
+            branch: branch || 'All branches'
+          },
+          stats: {
+            total: 0,
+            byStatus: { pending: 0, ongoing: 0, completed: 0 },
+            byRegion: {},
+            byBranch: {}
+          },
+          count: 0,
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: 0,
+            totalItems: 0
+          },
+          data: []
+        });
+      }
     }
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await DailyActivity.countDocuments(filter);
 
+    // ADD DEBUGGING HERE
+    console.log('Final filter:', JSON.stringify(filter, null, 2));
+    console.log('Expected total activities:', total);
+
     const activities = await DailyActivity.find(filter)
       .populate('user', 'id_card first_name last_name region branch department position')
       .sort({ date: -1, createdAt: 1 })
       .skip(skip)
       .limit(parseInt(limit));
+
+    // DEBUG: Check population results
+    console.log('Activities returned:', activities.length);
+    const nullUsers = activities.filter(a => !a.user);
+    console.log('Activities with null user after populate:', nullUsers.length);
+    if (nullUsers.length > 0) {
+      console.log('First null user activity ID:', nullUsers[0]?._id);
+    }
 
     // Calculate admin statistics
     const stats = {
@@ -461,6 +478,7 @@ const getAllActivities = async (req, res) => {
       else if (activity.status === 'ongoing') stats.byStatus.ongoing++;
       else if (activity.status === 'completed') stats.byStatus.completed++;
       
+      // FIX: Add safety checks
       const region = activity.user?.region;
       const branch = activity.user?.branch;
       
@@ -526,7 +544,11 @@ const getActivitiesByUser = async (req, res) => {
       });
     }
 
-    const filter = { user: id };
+    // Filter for activities - ensure user exists and matches the requested user
+    const filter = { 
+      user: id,
+      user: { $exists: true, $ne: null }
+    };
 
     // Date filter
     if (date) {
