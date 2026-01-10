@@ -1,6 +1,6 @@
 const DailyActivity = require('../models/dailyActivities');
 const User = require('../models/staff');
-const mongoose = require('mongoose'); // Add this import
+const mongoose = require('mongoose');
 
 const createDailyActivity = async (req, res) => {
   try {
@@ -353,8 +353,6 @@ const updateDailyActivity = async (req, res) => {
   }
 };
 
-// Admin functions
-// Admin functions
 const getAllActivities = async (req, res) => {
   try {
     const { date, status, region, branch, page = 1, limit = 20 } = req.query;
