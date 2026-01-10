@@ -47,6 +47,7 @@ const userSchema = new mongoose.Schema(
     },
     branch: {
       type: String,
+      enum: ['HQ', 'Alimosho', 'Warri', 'Osun'],
       default: 'HQ'
     },
 

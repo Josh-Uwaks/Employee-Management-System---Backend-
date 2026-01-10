@@ -106,11 +106,24 @@ const createDepartment = async (req, res) => {
       createdBy: req.user._id
     });
 
+    // Convert to plain object for JSON serialization
+    const departmentObj = department.toObject ? department.toObject() : department;
+    
+    // Ensure consistent field names
+    if (departmentObj._id) {
+      departmentObj._id = departmentObj._id.toString();
+    }
+    
+    // Remove mongoose-specific fields
+    delete departmentObj.__v;
+    
+    console.log('[DEPARTMENT] Created department object:', departmentObj);
+
     return res.status(HTTP_STATUS.CREATED).json({
       success: true,
       status: HTTP_STATUS.CREATED,
       message: SUCCESS_MESSAGES.DEPARTMENT_CREATED,
-      data: department
+      data: departmentObj
     });
 
   } catch (error) {

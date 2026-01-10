@@ -60,6 +60,11 @@ const ERROR_MESSAGES = {
   STAFF_MANAGER_REQUIRED: 'Staff must be assigned to a line manager',
   INVALID_MANAGER: 'Invalid line manager',
   
+  // Location Errors
+  INVALID_REGION: 'Invalid region specified',
+  INVALID_BRANCH: 'Invalid branch specified',
+  INVALID_REGION_BRANCH_COMBO: 'Invalid region and branch combination',
+  
   // OTP Errors
   OTP_REQUIRED: 'ID card and OTP are required',
   INVALID_OTP_FORMAT: 'OTP must be a 6-digit number',
@@ -147,6 +152,33 @@ const canAdminManageUser = (adminUser, targetUser) => {
   }
   
   return false;
+};
+
+/**
+ * Validate region and branch combination
+ */
+const validateLocation = (region, branch) => {
+  const validCombinations = {
+    'Lagos': ['HQ', 'Alimosho'],
+    'Delta': ['Warri'],
+    'Osun': ['Osun']
+  };
+
+  if (!validCombinations[region]) {
+    return { 
+      valid: false, 
+      message: ERROR_MESSAGES.INVALID_REGION
+    };
+  }
+
+  if (!validCombinations[region].includes(branch)) {
+    return { 
+      valid: false, 
+      message: ERROR_MESSAGES.INVALID_REGION_BRANCH_COMBO
+    };
+  }
+
+  return { valid: true };
 };
 
 // ===========================
@@ -250,6 +282,12 @@ const loginUser = async (req, res) => {
 
     await User.successfulLogin(id_card);
 
+    // Update last checkin location
+    user.lastCheckinAt = new Date();
+    user.lastCheckinRegion = user.region;
+    user.lastCheckinBranch = user.branch;
+    await user.save();
+
     if (!user.isVerified) {
       const otp = generateOTP();
       user.otp = otp;
@@ -335,8 +373,8 @@ const registerUser = async (req, res) => {
       password,
       first_name,
       last_name,
-      region,
-      branch,
+      region = 'Lagos',
+      branch = 'HQ',
       department,
       position,
       role = 'STAFF',
@@ -349,6 +387,16 @@ const registerUser = async (req, res) => {
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
         message: ERROR_MESSAGES.INVALID_ID_FORMAT
+      });
+    }
+
+    // Validate location combination
+    const locationValidation = validateLocation(region, branch);
+    if (!locationValidation.valid) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: locationValidation.message
       });
     }
 
@@ -449,6 +497,8 @@ const registerUser = async (req, res) => {
         first_name: user.first_name,
         last_name: user.last_name,
         role: user.role,
+        region: user.region,
+        branch: user.branch,
         department: dept.name,
         position: user.position,
         reportsTo: user.reportsTo
@@ -806,14 +856,14 @@ const getLockedAccounts = async (req, res) => {
     // Filter based on user's role
     let filteredAccounts = lockedAccounts;
     
-      if (req.user.role === 'LINE_MANAGER') {
-    filteredAccounts = lockedAccounts.filter(account => {
-      // Only show STAFF that report to this LINE_MANAGER
-      return account.role === 'STAFF' && 
-            account.reportsTo && 
-            account.reportsTo._id.toString() === req.user._id.toString();
-    });
-  }
+    if (req.user.role === 'LINE_MANAGER') {
+      filteredAccounts = lockedAccounts.filter(account => {
+        // Only show STAFF that report to this LINE_MANAGER
+        return account.role === 'STAFF' && 
+              account.reportsTo && 
+              account.reportsTo._id.toString() === req.user._id.toString();
+      });
+    }
     
     return res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -926,6 +976,8 @@ const lockAccount = async (req, res) => {
         first_name: user.first_name,
         last_name: user.last_name,
         role: user.role,
+        region: user.region,
+        branch: user.branch,
         lockedAt: user.lockedAt,
         lockedReason: user.lockedReason
       }
