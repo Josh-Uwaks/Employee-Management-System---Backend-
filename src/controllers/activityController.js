@@ -2,12 +2,26 @@ const DailyActivity = require('../models/dailyActivities');
 const User = require('../models/staff');
 const mongoose = require('mongoose');
 
+const isDevelopment = process.env.NODE_ENV === 'development';
+
 const createDailyActivity = async (req, res) => {
   try {
-    const { timeInterval, description, status, category, priority } = req.body;
+    const { timeInterval, description, status } = req.body;
+
+    if (isDevelopment) {
+      console.log('[DEV] createDailyActivity called with:', { 
+        timeInterval, 
+        description, 
+        status,
+        userId: req.user._id 
+      });
+    }
 
     // Validate required fields
     if (!timeInterval || !description) {
+      if (isDevelopment) {
+        console.log('[DEV] Validation failed - missing required fields');
+      }
       return res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
@@ -23,24 +37,21 @@ const createDailyActivity = async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // REMOVED: Future date restriction - allow any date
-    // This was preventing activities for current day if server timezone is different
-
-    // REMOVED: Overlapping time interval check - allow multiple activities in same slot
-    // This was preventing multiple activities in the same time slot
-    
-    // REMOVED: Exact time interval check - now allowing multiple activities in same time frame
-    // Users can now create multiple activities within the same time interval
-
     const activity = await DailyActivity.create({
       user: req.user._id,
       date: today,
       timeInterval,
       description,
-      status: status || 'pending',
-      category: category || 'work',
-      priority: priority || 'medium'
+      status: status || 'pending'
     });
+
+    if (isDevelopment) {
+      console.log('[DEV] Activity created successfully:', {
+        id: activity._id,
+        date: activity.date,
+        timeInterval: activity.timeInterval
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -56,6 +67,10 @@ const createDailyActivity = async (req, res) => {
         message: err.message
       }));
       
+      if (isDevelopment) {
+        console.log('[DEV] Mongoose validation error:', errors);
+      }
+      
       return res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
@@ -65,6 +80,9 @@ const createDailyActivity = async (req, res) => {
     }
 
     if (error.code === 11000) {
+      if (isDevelopment) {
+        console.log('[DEV] Duplicate key error:', error.keyValue);
+      }
       return res.status(409).json({
         success: false,
         error: 'DUPLICATE_ERROR',
@@ -85,6 +103,10 @@ const getTodayActivities = async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    if (isDevelopment) {
+      console.log('[DEV] getTodayActivities called for user:', req.user._id);
+    }
+
     const activities = await DailyActivity.find({
       user: req.user._id,
       date: today,
@@ -97,6 +119,13 @@ const getTodayActivities = async (req, res) => {
       ongoing: activities.filter(a => a.status === 'ongoing').length,
       completed: activities.filter(a => a.status === 'completed').length
     };
+
+    if (isDevelopment) {
+      console.log('[DEV] Today activities found:', {
+        count: activities.length,
+        stats
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -118,10 +147,22 @@ const getTodayActivities = async (req, res) => {
 
 const getActivitiesByDateRange = async (req, res) => {
   try {
-    const { startDate, endDate, status, category } = req.query;
+    const { startDate, endDate, status } = req.query;
+
+    if (isDevelopment) {
+      console.log('[DEV] getActivitiesByDateRange called with:', { 
+        startDate, 
+        endDate, 
+        status,
+        userId: req.user._id 
+      });
+    }
 
     // Validate required parameters
     if (!startDate || !endDate) {
+      if (isDevelopment) {
+        console.log('[DEV] Missing startDate or endDate');
+      }
       return res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
@@ -133,11 +174,14 @@ const getActivitiesByDateRange = async (req, res) => {
       });
     }
 
-    // Validate date format
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    // Validate date format and create dates in UTC
+    const start = new Date(startDate + 'T00:00:00Z');
+    const end = new Date(endDate + 'T23:59:59.999Z');
     
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      if (isDevelopment) {
+        console.log('[DEV] Invalid date format:', { startDate, endDate });
+      }
       return res.status(400).json({
         success: false,
         error: 'DATE_FORMAT_ERROR',
@@ -151,6 +195,9 @@ const getActivitiesByDateRange = async (req, res) => {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
     if (diffDays > maxDays) {
+      if (isDevelopment) {
+        console.log('[DEV] Date range exceeds limit:', { diffDays, maxDays });
+      }
       return res.status(400).json({
         success: false,
         error: 'DATE_RANGE_ERROR',
@@ -160,6 +207,9 @@ const getActivitiesByDateRange = async (req, res) => {
 
     // Ensure start date is before end date
     if (start > end) {
+      if (isDevelopment) {
+        console.log('[DEV] Start date after end date:', { start, end });
+      }
       return res.status(400).json({
         success: false,
         error: 'DATE_ORDER_ERROR',
@@ -167,21 +217,25 @@ const getActivitiesByDateRange = async (req, res) => {
       });
     }
 
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
+    if (isDevelopment) {
+      console.log('[DEV] Date range in UTC:', {
+        start: start.toISOString(),
+        end: end.toISOString()
+      });
+    }
 
     const filter = {
       user: req.user._id,
       date: { $gte: start, $lte: end }
     };
 
-    // Apply optional filters
+    // Apply status filter if provided
     if (status && ['pending', 'ongoing', 'completed'].includes(status)) {
       filter.status = status;
     }
-    
-    if (category && ['work', 'meeting', 'training', 'break', 'other'].includes(category)) {
-      filter.category = category;
+
+    if (isDevelopment) {
+      console.log('[DEV] Database filter:', JSON.stringify(filter, null, 2));
     }
 
     const activities = await DailyActivity
@@ -196,24 +250,28 @@ const getActivitiesByDateRange = async (req, res) => {
         pending: activities.filter(a => a.status === 'pending').length,
         ongoing: activities.filter(a => a.status === 'ongoing').length,
         completed: activities.filter(a => a.status === 'completed').length
-      },
-      byCategory: {
-        work: activities.filter(a => a.category === 'work').length,
-        meeting: activities.filter(a => a.category === 'meeting').length,
-        training: activities.filter(a => a.category === 'training').length,
-        break: activities.filter(a => a.category === 'break').length,
-        other: activities.filter(a => a.category === 'other').length
       }
     };
 
-    // Group activities by date
+    // Group activities by date (using local date for display)
     activities.forEach(activity => {
-      const dateStr = activity.date.toISOString().split('T')[0];
+      const localDate = new Date(activity.date);
+      localDate.setMinutes(localDate.getMinutes() + localDate.getTimezoneOffset());
+      const dateStr = localDate.toISOString().split('T')[0];
+      
       if (!stats.byDate[dateStr]) {
         stats.byDate[dateStr] = 0;
       }
       stats.byDate[dateStr]++;
     });
+
+    if (isDevelopment) {
+      console.log('[DEV] Activities found:', {
+        count: activities.length,
+        dateRange: { start, end },
+        stats
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -241,10 +299,21 @@ const getActivitiesByDateRange = async (req, res) => {
 const updateDailyActivity = async (req, res) => {
   try {
     const { id } = req.params;
-    const { timeInterval, description, status, category, priority } = req.body;
+    const { timeInterval, description, status } = req.body;
+
+    if (isDevelopment) {
+      console.log('[DEV] updateDailyActivity called with:', { 
+        activityId: id,
+        updates: { timeInterval, description, status },
+        userId: req.user._id 
+      });
+    }
 
     // Validate activity ID format
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      if (isDevelopment) {
+        console.log('[DEV] Invalid activity ID:', id);
+      }
       return res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
@@ -253,7 +322,10 @@ const updateDailyActivity = async (req, res) => {
     }
 
     // Validate at least one field is provided for update
-    if (!timeInterval && !description && !status && !category && !priority) {
+    if (!timeInterval && !description && !status) {
+      if (isDevelopment) {
+        console.log('[DEV] No update fields provided');
+      }
       return res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
@@ -263,28 +335,13 @@ const updateDailyActivity = async (req, res) => {
 
     // Validate status if provided
     if (status && !['pending', 'ongoing', 'completed'].includes(status)) {
+      if (isDevelopment) {
+        console.log('[DEV] Invalid status value:', status);
+      }
       return res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
         message: 'Invalid status value. Must be one of: pending, ongoing, completed'
-      });
-    }
-
-    // Validate category if provided
-    if (category && !['work', 'meeting', 'training', 'break', 'other'].includes(category)) {
-      return res.status(400).json({
-        success: false,
-        error: 'VALIDATION_ERROR',
-        message: 'Invalid category value'
-      });
-    }
-
-    // Validate priority if provided
-    if (priority && !['low', 'medium', 'high'].includes(priority)) {
-      return res.status(400).json({
-        success: false,
-        error: 'VALIDATION_ERROR',
-        message: 'Invalid priority value. Must be one of: low, medium, high'
       });
     }
 
@@ -295,6 +352,9 @@ const updateDailyActivity = async (req, res) => {
     });
 
     if (!activity) {
+      if (isDevelopment) {
+        console.log('[DEV] Activity not found or permission denied:', id);
+      }
       return res.status(404).json({
         success: false,
         error: 'NOT_FOUND',
@@ -304,6 +364,12 @@ const updateDailyActivity = async (req, res) => {
 
     // Prevent updating completed activities to anything else
     if (activity.status === 'completed' && status !== 'completed' && status !== undefined) {
+      if (isDevelopment) {
+        console.log('[DEV] Cannot update completed activity:', {
+          currentStatus: activity.status,
+          requestedStatus: status
+        });
+      }
       return res.status(400).json({
         success: false,
         error: 'UPDATE_ERROR',
@@ -316,12 +382,17 @@ const updateDailyActivity = async (req, res) => {
     if (timeInterval !== undefined) updates.timeInterval = timeInterval;
     if (description !== undefined) updates.description = description;
     if (status !== undefined) updates.status = status;
-    if (category !== undefined) updates.category = category;
-    if (priority !== undefined) updates.priority = priority;
 
     Object.assign(activity, updates);
     
     const updatedActivity = await activity.save();
+
+    if (isDevelopment) {
+      console.log('[DEV] Activity updated successfully:', {
+        id: updatedActivity._id,
+        updates
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -336,6 +407,10 @@ const updateDailyActivity = async (req, res) => {
         field: err.path,
         message: err.message
       }));
+      
+      if (isDevelopment) {
+        console.log('[DEV] Update validation error:', errors);
+      }
       
       return res.status(400).json({
         success: false,
@@ -357,18 +432,29 @@ const getAllActivities = async (req, res) => {
   try {
     const { date, status, region, branch, page = 1, limit = 20 } = req.query;
 
-    console.log('Query params received:', { date, status, region, branch, page, limit });
+    if (isDevelopment) {
+      console.log('[DEV] getAllActivities called with query params:', { 
+        date, 
+        status, 
+        region, 
+        branch, 
+        page, 
+        limit 
+      });
+    }
 
-    // START: Always filter out activities with null or non-existent users
+    // Always filter out activities with null or non-existent users
     const filter = {
-      user: { $exists: true, $ne: null } // ← CRITICAL FIX
+      user: { $exists: true, $ne: null }
     };
-    // END
 
     // Date filter - handle empty string gracefully
     if (date && date.trim() !== '' && date !== 'null' && date !== 'undefined') {
       const d = new Date(date);
       if (isNaN(d.getTime())) {
+        if (isDevelopment) {
+          console.log('[DEV] Invalid date format:', date);
+        }
         return res.status(400).json({
           success: false,
           error: 'DATE_FORMAT_ERROR',
@@ -382,6 +468,9 @@ const getAllActivities = async (req, res) => {
     // Status filter - handle 'all' value
     if (status && status !== 'all' && status !== 'null' && status !== 'undefined') {
       if (!['pending', 'ongoing', 'completed'].includes(status)) {
+        if (isDevelopment) {
+          console.log('[DEV] Invalid status value:', status);
+        }
         return res.status(400).json({
           success: false,
           error: 'VALIDATION_ERROR',
@@ -400,15 +489,24 @@ const getAllActivities = async (req, res) => {
       userFilter.branch = branch;
     }
 
+    if (isDevelopment) {
+      console.log('[DEV] User filter:', userFilter);
+    }
+
     // Only query users if we have filters
     let userIds = null;
     if (Object.keys(userFilter).length > 0) {
       const users = await User.find(userFilter).select('_id');
+      if (isDevelopment) {
+        console.log('[DEV] Found users matching filter:', users.length);
+      }
       if (users && users.length > 0) {
         userIds = users.map(u => u._id);
-        filter.user = { $in: userIds }; // Override the previous filter
+        filter.user = { $in: userIds };
       } else if (users && users.length === 0) {
-        // If we have filters but no users match, return empty result
+        if (isDevelopment) {
+          console.log('[DEV] No users match filter, returning empty result');
+        }
         return res.status(200).json({
           success: true,
           message: 'No activities found',
@@ -440,9 +538,11 @@ const getAllActivities = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await DailyActivity.countDocuments(filter);
 
-    // ADD DEBUGGING HERE
-    console.log('Final filter:', JSON.stringify(filter, null, 2));
-    console.log('Expected total activities:', total);
+    if (isDevelopment) {
+      console.log('[DEV] Final database filter:', JSON.stringify(filter, null, 2));
+      console.log('[DEV] Expected total activities:', total);
+      console.log('[DEV] Pagination:', { page, limit, skip });
+    }
 
     const activities = await DailyActivity.find(filter)
       .populate('user', 'id_card first_name last_name region branch department position')
@@ -451,11 +551,26 @@ const getAllActivities = async (req, res) => {
       .limit(parseInt(limit));
 
     // DEBUG: Check population results
-    console.log('Activities returned:', activities.length);
-    const nullUsers = activities.filter(a => !a.user);
-    console.log('Activities with null user after populate:', nullUsers.length);
-    if (nullUsers.length > 0) {
-      console.log('First null user activity ID:', nullUsers[0]?._id);
+    if (isDevelopment) {
+      console.log('[DEV] Activities returned:', activities.length);
+      const nullUsers = activities.filter(a => !a.user);
+      console.log('[DEV] Activities with null user after populate:', nullUsers.length);
+      if (nullUsers.length > 0) {
+        console.log('[DEV] First null user activity ID:', nullUsers[0]?._id);
+      }
+      
+      console.log('[DEV] Sample activities (first 3):', 
+        activities.slice(0, 3).map(a => ({
+          id: a._id,
+          date: a.date,
+          user: a.user ? {
+            id: a.user._id,
+            name: `${a.user.first_name} ${a.user.last_name}`,
+            region: a.user.region,
+            branch: a.user.branch
+          } : null
+        }))
+      );
     }
 
     // Calculate admin statistics
@@ -476,7 +591,6 @@ const getAllActivities = async (req, res) => {
       else if (activity.status === 'ongoing') stats.byStatus.ongoing++;
       else if (activity.status === 'completed') stats.byStatus.completed++;
       
-      // FIX: Add safety checks
       const region = activity.user?.region;
       const branch = activity.user?.branch;
       
@@ -488,6 +602,10 @@ const getAllActivities = async (req, res) => {
         stats.byBranch[branch] = (stats.byBranch[branch] || 0) + 1;
       }
     });
+
+    if (isDevelopment) {
+      console.log('[DEV] Calculated stats:', stats);
+    }
 
     res.status(200).json({
       success: true,
@@ -523,8 +641,21 @@ const getActivitiesByUser = async (req, res) => {
     const { id } = req.params;
     const { date, status, page = 1, limit = 20 } = req.query;
 
+    if (isDevelopment) {
+      console.log('[DEV] getActivitiesByUser called with:', {
+        userId: id,
+        date: date,
+        status: status,
+        page: page,
+        limit: limit
+      });
+    }
+
     // Validate user ID format
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      if (isDevelopment) {
+        console.log('[DEV] Invalid user ID format:', id);
+      }
       return res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
@@ -535,6 +666,9 @@ const getActivitiesByUser = async (req, res) => {
     // Check if user exists
     const user = await User.findById(id).select('id_card first_name last_name region branch department position');
     if (!user) {
+      if (isDevelopment) {
+        console.log('[DEV] User not found:', id);
+      }
       return res.status(404).json({
         success: false,
         error: 'USER_NOT_FOUND',
@@ -542,16 +676,23 @@ const getActivitiesByUser = async (req, res) => {
       });
     }
 
-    // Filter for activities - ensure user exists and matches the requested user
+    // Filter for activities
     const filter = { 
       user: id,
       user: { $exists: true, $ne: null }
     };
 
-    // Date filter
-    if (date) {
+    if (isDevelopment) {
+      console.log('[DEV] Base filter:', filter);
+    }
+
+    // Date filter - handle empty/undefined/null values gracefully
+    if (date && date.trim() !== '' && date !== 'null' && date !== 'undefined') {
       const d = new Date(date);
       if (isNaN(d.getTime())) {
+        if (isDevelopment) {
+          console.log('[DEV] Invalid date format:', date);
+        }
         return res.status(400).json({
           success: false,
           error: 'DATE_FORMAT_ERROR',
@@ -560,11 +701,20 @@ const getActivitiesByUser = async (req, res) => {
       }
       d.setHours(0, 0, 0, 0);
       filter.date = d;
+      
+      if (isDevelopment) {
+        console.log('[DEV] Adding date filter:', d);
+      }
+    } else if (isDevelopment && date) {
+      console.log('[DEV] Skipping date filter (empty or invalid):', date);
     }
 
-    // Status filter
-    if (status) {
+    // Status filter - handle empty/undefined/null values gracefully
+    if (status && status.trim() !== '' && status !== 'null' && status !== 'undefined') {
       if (!['pending', 'ongoing', 'completed'].includes(status)) {
+        if (isDevelopment) {
+          console.log('[DEV] Invalid status value:', status);
+        }
         return res.status(400).json({
           success: false,
           error: 'VALIDATION_ERROR',
@@ -572,11 +722,23 @@ const getActivitiesByUser = async (req, res) => {
         });
       }
       filter.status = status;
+      
+      if (isDevelopment) {
+        console.log('[DEV] Adding status filter:', status);
+      }
+    } else if (isDevelopment && status) {
+      console.log('[DEV] Skipping status filter (empty or invalid):', status);
     }
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await DailyActivity.countDocuments(filter);
+
+    if (isDevelopment) {
+      console.log('[DEV] Final filter:', JSON.stringify(filter, null, 2));
+      console.log('[DEV] Total activities:', total);
+      console.log('[DEV] Pagination:', { page, limit, skip });
+    }
 
     const activities = await DailyActivity.find(filter)
       .populate('user', 'id_card first_name last_name region branch department position')
@@ -599,6 +761,11 @@ const getActivitiesByUser = async (req, res) => {
       else if (activity.status === 'ongoing') stats.ongoing++;
       else if (activity.status === 'completed') stats.completed++;
     });
+
+    if (isDevelopment) {
+      console.log('[DEV] Activities found:', activities.length);
+      console.log('[DEV] Calculated stats:', stats);
+    }
 
     res.status(200).json({
       success: true,
@@ -628,6 +795,15 @@ const getActivitiesByUser = async (req, res) => {
     });
   } catch (error) {
     console.error('Admin Get Activities By User Error:', error);
+    
+    if (isDevelopment) {
+      console.log('[DEV] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      });
+    }
+    
     res.status(500).json({
       success: false,
       error: 'SERVER_ERROR',
@@ -640,8 +816,18 @@ const deleteDailyActivity = async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (isDevelopment) {
+      console.log('[DEV] deleteDailyActivity called for:', { 
+        activityId: id,
+        userId: req.user._id 
+      });
+    }
+
     // Validate activity ID format
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      if (isDevelopment) {
+        console.log('[DEV] Invalid activity ID:', id);
+      }
       return res.status(400).json({
         success: false,
         error: 'VALIDATION_ERROR',
@@ -656,10 +842,20 @@ const deleteDailyActivity = async (req, res) => {
     });
 
     if (!activity) {
+      if (isDevelopment) {
+        console.log('[DEV] Activity not found or permission denied:', id);
+      }
       return res.status(404).json({
         success: false,
         error: 'NOT_FOUND',
         message: 'Activity not found or you do not have permission to delete it'
+      });
+    }
+
+    if (isDevelopment) {
+      console.log('[DEV] Activity deleted successfully:', {
+        id: activity._id,
+        timeInterval: activity.timeInterval
       });
     }
 

@@ -11,6 +11,11 @@ const {
 } = require('../services/adminNotification');
 
 // ===========================
+// Development Mode Check
+// ===========================
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+// ===========================
 // HTTP Status Codes
 // ===========================
 const HTTP_STATUS = {
@@ -94,7 +99,13 @@ const getNotificationRecipients = async (lockedUser) => {
   try {
     const recipients = [];
     
-    console.log(`[NOTIFICATION] Determining recipients for: ${lockedUser.id_card} (${lockedUser.role})`);
+    if (isDevelopment) {
+      console.log('[DEV NOTIFICATION] Determining recipients for:', {
+        id_card: lockedUser.id_card,
+        role: lockedUser.role,
+        name: `${lockedUser.first_name} ${lockedUser.last_name}`
+      });
+    }
     
     // 1. If user reports to someone (STAFF), notify their manager
     if (lockedUser.role === 'STAFF' && lockedUser.reportsTo && lockedUser.reportsTo.email) {
@@ -104,7 +115,9 @@ const getNotificationRecipients = async (lockedUser) => {
         name: `${lockedUser.reportsTo.first_name} ${lockedUser.reportsTo.last_name}`,
         role: lockedUser.reportsTo.role
       });
-      console.log(`[NOTIFICATION] Adding manager: ${lockedUser.reportsTo.email}`);
+      if (isDevelopment) {
+        console.log('[DEV NOTIFICATION] Adding manager:', lockedUser.reportsTo.email);
+      }
     }
     
     // 2. Always notify SUPER_ADMINs for oversight
@@ -122,11 +135,16 @@ const getNotificationRecipients = async (lockedUser) => {
           name: `${admin.first_name} ${admin.last_name}`,
           role: 'SUPER_ADMIN'
         });
-        console.log(`[NOTIFICATION] Adding super admin: ${admin.email}`);
+        if (isDevelopment) {
+          console.log('[DEV NOTIFICATION] Adding super admin:', admin.email);
+        }
       }
     });
     
-    console.log(`[NOTIFICATION] Total recipients: ${recipients.length}`);
+    if (isDevelopment) {
+      console.log('[DEV NOTIFICATION] Total recipients:', recipients.length);
+    }
+    
     return recipients;
     
   } catch (error) {
@@ -192,8 +210,15 @@ const loginUser = async (req, res) => {
   try {
     const { id_card, password } = req.body;
 
+    if (isDevelopment) {
+      console.log('[DEV LOGIN] Login attempt:', { id_card, hasPassword: !!password });
+    }
+
     // Validate required fields
     if (!id_card || !password) {
+      if (isDevelopment) {
+        console.log('[DEV LOGIN] Missing required fields:', { id_card: !!id_card, password: !!password });
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -203,6 +228,9 @@ const loginUser = async (req, res) => {
 
     // Validate ID card format
     if (!/^KE\d{3}$/.test(id_card)) {
+      if (isDevelopment) {
+        console.log('[DEV LOGIN] Invalid ID card format:', id_card);
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -211,10 +239,17 @@ const loginUser = async (req, res) => {
     }
 
     // CRITICAL FIX: Populate reportsTo for proper authorization
+    if (isDevelopment) {
+      console.log('[DEV LOGIN] Looking up user:', id_card);
+    }
+    
     const user = await User.findOne({ id_card })
       .populate('department reportsTo', 'id_card first_name last_name email role');
 
     if (!user) {
+      if (isDevelopment) {
+        console.log('[DEV LOGIN] User not found:', id_card);
+      }
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
         success: false,
         status: HTTP_STATUS.UNAUTHORIZED,
@@ -222,7 +257,24 @@ const loginUser = async (req, res) => {
       });
     }
 
+    if (isDevelopment) {
+      console.log('[DEV LOGIN] User found:', {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        isLocked: user.isLocked,
+        isVerified: user.isVerified,
+        loginAttempts: user.loginAttempts
+      });
+    }
+
     if (user.isLocked) {
+      if (isDevelopment) {
+        console.log('[DEV LOGIN] Account is locked:', {
+          lockedAt: user.lockedAt,
+          lockedReason: user.lockedReason
+        });
+      }
       return res.status(HTTP_STATUS.LOCKED).json({
         success: false,
         status: HTTP_STATUS.LOCKED,
@@ -233,27 +285,48 @@ const loginUser = async (req, res) => {
       });
     }
 
+    if (isDevelopment) {
+      console.log('[DEV LOGIN] Checking password...');
+    }
+    
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
+      if (isDevelopment) {
+        console.log('[DEV LOGIN] Password mismatch');
+      }
+      
       const lockedUser = await User.failedLogin(id_card);
 
       if (lockedUser) {
-        console.log('[SECURITY] Account locked, sending notifications for:', lockedUser.id_card);
+        if (isDevelopment) {
+          console.log('[DEV LOGIN] Account locked after failed attempts:', {
+            loginAttempts: lockedUser.loginAttempts,
+            lockedAt: lockedUser.lockedAt,
+            lockedReason: lockedUser.lockedReason
+          });
+        }
         
         try {
           const recipients = await getNotificationRecipients(lockedUser);
           const notificationEmails = recipients.map(r => r.email);
           
           if (notificationEmails.length > 0) {
+            if (isDevelopment) {
+              console.log('[DEV NOTIFICATION] Sending lock notifications to:', notificationEmails);
+            }
             await sendAccountLockedNotification(lockedUser, notificationEmails, {
               lockedBy: 'System (auto-lock)',
               lockedByRole: 'SYSTEM',
               reason: '3 consecutive failed login attempts'
             });
-            console.log(`[NOTIFICATION] Sent to ${notificationEmails.length} recipient(s)`);
+            if (isDevelopment) {
+              console.log(`[DEV NOTIFICATION] Sent to ${notificationEmails.length} recipient(s)`);
+            }
           } else {
-            console.log('[NOTIFICATION] No recipients found for notification');
+            if (isDevelopment) {
+              console.log('[DEV NOTIFICATION] No recipients found for notification');
+            }
           }
         } catch (notificationError) {
           console.error('[NOTIFICATION] Failed to send:', notificationError.message);
@@ -272,6 +345,10 @@ const loginUser = async (req, res) => {
       const updatedUser = await User.findOne({ id_card });
       const attemptsRemaining = 3 - updatedUser.loginAttempts;
       
+      if (isDevelopment) {
+        console.log('[DEV LOGIN] Failed attempt, remaining:', attemptsRemaining);
+      }
+      
       return res.status(HTTP_STATUS.UNAUTHORIZED).json({
         success: false,
         status: HTTP_STATUS.UNAUTHORIZED,
@@ -280,6 +357,10 @@ const loginUser = async (req, res) => {
       });
     }
 
+    if (isDevelopment) {
+      console.log('[DEV LOGIN] Password correct, logging successful login');
+    }
+    
     await User.successfulLogin(id_card);
 
     // Update last checkin location
@@ -289,6 +370,10 @@ const loginUser = async (req, res) => {
     await user.save();
 
     if (!user.isVerified) {
+      if (isDevelopment) {
+        console.log('[DEV LOGIN] User not verified, generating OTP');
+      }
+      
       const otp = generateOTP();
       user.otp = otp;
       user.otpExpiresAt = Date.now() + 10 * 60 * 1000;
@@ -299,6 +384,10 @@ const loginUser = async (req, res) => {
         first_name: user.first_name,
         otp
       });
+
+      if (isDevelopment) {
+        console.log('[DEV LOGIN] OTP sent to:', user.email);
+      }
 
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
@@ -313,12 +402,24 @@ const loginUser = async (req, res) => {
       });
     }
 
+    if (isDevelopment) {
+      console.log('[DEV LOGIN] Generating JWT token');
+    }
+    
     const token = signToken({
       id: user._id,
       id_card: user.id_card,
       role: user.role,
       isAdmin: user.isAdmin
     });
+
+    if (isDevelopment) {
+      console.log('[DEV LOGIN] Login successful for user:', {
+        id: user._id,
+        id_card: user.id_card,
+        role: user.role
+      });
+    }
 
     return res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -344,11 +445,16 @@ const loginUser = async (req, res) => {
 
   } catch (error) {
     console.error('[AUTH] Login error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV LOGIN] Full error:', error);
+    }
+    
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       message: ERROR_MESSAGES.AUTH_FAILED,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: isDevelopment ? error.message : undefined
     });
   }
 };
@@ -359,7 +465,18 @@ const loginUser = async (req, res) => {
 const registerUser = async (req, res) => {
   try {
     // Check authorization - Only SUPER_ADMIN can register users
+    if (isDevelopment) {
+      console.log('[DEV REGISTER] Registration attempt by:', {
+        userId: req.user.id,
+        role: req.user.role,
+        id_card: req.user.id_card
+      });
+    }
+    
     if (req.user.role !== 'SUPER_ADMIN') {
+      if (isDevelopment) {
+        console.log('[DEV REGISTER] Unauthorized - not SUPER_ADMIN');
+      }
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
         status: HTTP_STATUS.FORBIDDEN,
@@ -381,8 +498,26 @@ const registerUser = async (req, res) => {
       reportsTo
     } = req.body;
 
+    if (isDevelopment) {
+      console.log('[DEV REGISTER] Registration data:', {
+        id_card,
+        email,
+        first_name,
+        last_name,
+        region,
+        branch,
+        department,
+        position,
+        role,
+        reportsTo
+      });
+    }
+
     // Validate ID card format
     if (!/^KE\d{3}$/.test(id_card)) {
+      if (isDevelopment) {
+        console.log('[DEV REGISTER] Invalid ID card format:', id_card);
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -393,6 +528,9 @@ const registerUser = async (req, res) => {
     // Validate location combination
     const locationValidation = validateLocation(region, branch);
     if (!locationValidation.valid) {
+      if (isDevelopment) {
+        console.log('[DEV REGISTER] Invalid location:', { region, branch });
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -401,8 +539,18 @@ const registerUser = async (req, res) => {
     }
 
     // Check for existing user
+    if (isDevelopment) {
+      console.log('[DEV REGISTER] Checking for existing user...');
+    }
+    
     const exists = await User.findOne({ $or: [{ id_card }, { email }] });
     if (exists) {
+      if (isDevelopment) {
+        console.log('[DEV REGISTER] User already exists:', {
+          existingIdCard: exists.id_card,
+          existingEmail: exists.email
+        });
+      }
       return res.status(HTTP_STATUS.CONFLICT).json({
         success: false,
         status: HTTP_STATUS.CONFLICT,
@@ -411,8 +559,15 @@ const registerUser = async (req, res) => {
     }
 
     // Validate department
+    if (isDevelopment) {
+      console.log('[DEV REGISTER] Validating department:', department);
+    }
+    
     const dept = await Department.findOne({ _id: department, isActive: true });
     if (!dept) {
+      if (isDevelopment) {
+        console.log('[DEV REGISTER] Invalid department:', department);
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -426,6 +581,9 @@ const registerUser = async (req, res) => {
 
     if (role === 'STAFF') {
       if (!reportsTo) {
+        if (isDevelopment) {
+          console.log('[DEV REGISTER] STAFF requires reportsTo');
+        }
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
           status: HTTP_STATUS.BAD_REQUEST,
@@ -440,6 +598,9 @@ const registerUser = async (req, res) => {
       });
 
       if (!manager) {
+        if (isDevelopment) {
+          console.log('[DEV REGISTER] Invalid manager:', reportsTo);
+        }
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
           status: HTTP_STATUS.BAD_REQUEST,
@@ -454,6 +615,14 @@ const registerUser = async (req, res) => {
       isAdmin = true;
       // SUPER_ADMIN cannot report to anyone
       finalReportsTo = null;
+    }
+
+    if (isDevelopment) {
+      console.log('[DEV REGISTER] Creating user with:', {
+        role,
+        isAdmin,
+        reportsTo: finalReportsTo
+      });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -471,7 +640,6 @@ const registerUser = async (req, res) => {
       role,
       reportsTo: finalReportsTo,
       isAdmin,
-      // Admin-registered users should still verify via OTP
       isVerified: false
     });
 
@@ -481,11 +649,23 @@ const registerUser = async (req, res) => {
     user.otpExpiresAt = Date.now() + 10 * 60 * 1000;
     await user.save();
 
+    if (isDevelopment) {
+      console.log('[DEV REGISTER] Generated OTP for user:', {
+        id_card: user.id_card,
+        email: user.email,
+        otp
+      });
+    }
+
     await sendOtpEmail({
       email: user.email,
       first_name: user.first_name,
       otp
     });
+
+    if (isDevelopment) {
+      console.log('[DEV REGISTER] User registered successfully:', user._id);
+    }
 
     return res.status(HTTP_STATUS.CREATED).json({
       success: true,
@@ -508,8 +688,15 @@ const registerUser = async (req, res) => {
   } catch (error) {
     console.error('[ADMIN] Registration error:', error.message);
     
+    if (isDevelopment) {
+      console.error('[DEV REGISTER] Full error:', error);
+    }
+    
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
+      if (isDevelopment) {
+        console.log('[DEV REGISTER] Duplicate key error:', field);
+      }
       return res.status(HTTP_STATUS.CONFLICT).json({
         success: false,
         status: HTTP_STATUS.CONFLICT,
@@ -521,7 +708,7 @@ const registerUser = async (req, res) => {
       success: false,
       status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       message: ERROR_MESSAGES.REGISTRATION_FAILED,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: isDevelopment ? error.message : undefined
     });
   }
 };
@@ -537,8 +724,15 @@ const verifyOtp = async (req, res) => {
   try {
     const { id_card, otp } = req.body;
 
+    if (isDevelopment) {
+      console.log('[DEV OTP] Verify OTP attempt:', { id_card, otp });
+    }
+
     // Validate required fields
     if (!id_card || !otp) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] Missing required fields');
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -549,6 +743,9 @@ const verifyOtp = async (req, res) => {
     const user = await User.findOne({ id_card });
     
     if (!user) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] User not found:', id_card);
+      }
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         status: HTTP_STATUS.NOT_FOUND,
@@ -557,6 +754,9 @@ const verifyOtp = async (req, res) => {
     }
 
     if (user.isLocked) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] Account is locked');
+      }
       return res.status(HTTP_STATUS.LOCKED).json({
         success: false,
         status: HTTP_STATUS.LOCKED,
@@ -566,6 +766,9 @@ const verifyOtp = async (req, res) => {
     }
 
     if (user.isVerified) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] Account already verified');
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -575,6 +778,9 @@ const verifyOtp = async (req, res) => {
 
     // Validate OTP format
     if (!/^\d{6}$/.test(otp)) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] Invalid OTP format:', otp);
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -582,7 +788,19 @@ const verifyOtp = async (req, res) => {
       });
     }
 
+    if (isDevelopment) {
+      console.log('[DEV OTP] Checking OTP:', {
+        userOTP: user.otp,
+        providedOTP: otp,
+        expiresAt: user.otpExpiresAt,
+        currentTime: Date.now()
+      });
+    }
+
     if (user.otp !== otp || !user.otpExpiresAt || user.otpExpiresAt < Date.now()) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] Invalid or expired OTP');
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -595,6 +813,10 @@ const verifyOtp = async (req, res) => {
     user.otpExpiresAt = null;
     await user.save();
 
+    if (isDevelopment) {
+      console.log('[DEV OTP] OTP verified successfully for:', id_card);
+    }
+
     return res.status(HTTP_STATUS.OK).json({
       success: true,
       status: HTTP_STATUS.OK,
@@ -603,11 +825,16 @@ const verifyOtp = async (req, res) => {
 
   } catch (error) {
     console.error('[AUTH] OTP verification error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV OTP] Full error:', error);
+    }
+    
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       message: ERROR_MESSAGES.OTP_VERIFICATION_FAILED,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: isDevelopment ? error.message : undefined
     });
   }
 };
@@ -619,8 +846,15 @@ const resendOtp = async (req, res) => {
   try {
     const { id_card } = req.body;
     
+    if (isDevelopment) {
+      console.log('[DEV OTP] Resend OTP request:', { id_card });
+    }
+
     // Validate required field
     if (!id_card) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] ID card required');
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -631,6 +865,9 @@ const resendOtp = async (req, res) => {
     const user = await User.findOne({ id_card });
     
     if (!user) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] User not found:', id_card);
+      }
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         status: HTTP_STATUS.NOT_FOUND,
@@ -639,6 +876,9 @@ const resendOtp = async (req, res) => {
     }
 
     if (user.isLocked) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] Account is locked');
+      }
       return res.status(HTTP_STATUS.LOCKED).json({
         success: false,
         status: HTTP_STATUS.LOCKED,
@@ -648,6 +888,9 @@ const resendOtp = async (req, res) => {
     }
 
     if (user.isVerified) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] Account already verified');
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -660,11 +903,24 @@ const resendOtp = async (req, res) => {
     user.otpExpiresAt = Date.now() + 10 * 60 * 1000;
     await user.save();
     
+    if (isDevelopment) {
+      console.log('[DEV OTP] Generated new OTP:', {
+        id_card: user.id_card,
+        email: user.email,
+        otp,
+        expiresAt: user.otpExpiresAt
+      });
+    }
+
     await sendOtpEmail({
       email: user.email,
       first_name: user.first_name,
       otp
     });
+
+    if (isDevelopment) {
+      console.log('[DEV OTP] OTP sent to:', user.email);
+    }
 
     return res.status(HTTP_STATUS.OK).json({
       success: true,
@@ -676,11 +932,16 @@ const resendOtp = async (req, res) => {
 
   } catch (error) {
     console.error('[AUTH] Resend OTP error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV OTP] Full error:', error);
+    }
+    
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       message: ERROR_MESSAGES.OTP_RESEND_FAILED,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: isDevelopment ? error.message : undefined
     });
   }
 };
@@ -692,7 +953,14 @@ const checkOtpStatus = async (req, res) => {
   try {
     const { id_card } = req.body;
     
+    if (isDevelopment) {
+      console.log('[DEV OTP] Check OTP status request:', { id_card });
+    }
+
     if (!id_card) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] ID card required');
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -703,10 +971,22 @@ const checkOtpStatus = async (req, res) => {
     const user = await User.findOne({ id_card });
     
     if (!user) {
+      if (isDevelopment) {
+        console.log('[DEV OTP] User not found:', id_card);
+      }
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         status: HTTP_STATUS.NOT_FOUND,
         message: ERROR_MESSAGES.INVALID_CREDENTIALS
+      });
+    }
+
+    if (isDevelopment) {
+      console.log('[DEV OTP] OTP status:', {
+        isVerified: user.isVerified,
+        hasOtp: !!user.otp,
+        otpExpiresAt: user.otpExpiresAt,
+        isLocked: user.isLocked
       });
     }
 
@@ -726,11 +1006,16 @@ const checkOtpStatus = async (req, res) => {
     });
   } catch (error) {
     console.error('[AUTH] Check OTP status error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV OTP] Full error:', error);
+    }
+    
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       message: ERROR_MESSAGES.SERVER_ERROR,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: isDevelopment ? error.message : undefined
     });
   }
 };
@@ -746,8 +1031,19 @@ const unlockAccount = async (req, res) => {
   try {
     const { id_card } = req.body;
     
+    if (isDevelopment) {
+      console.log('[DEV ADMIN] Unlock account request:', {
+        adminId: req.user.id,
+        adminRole: req.user.role,
+        targetIdCard: id_card
+      });
+    }
+
     // Check authorization
     if (!req.user.isAdmin) {
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Unauthorized - not admin');
+      }
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
         status: HTTP_STATUS.FORBIDDEN,
@@ -757,6 +1053,9 @@ const unlockAccount = async (req, res) => {
 
     const targetUser = await User.findOne({ id_card });
     if (!targetUser) {
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Target user not found:', id_card);
+      }
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         status: HTTP_STATUS.NOT_FOUND,
@@ -766,6 +1065,12 @@ const unlockAccount = async (req, res) => {
 
     // Check if admin can manage this user
     if (!canAdminManageUser(req.user, targetUser) && req.user.role !== 'SUPER_ADMIN') {
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Insufficient permissions:', {
+          adminRole: req.user.role,
+          targetRole: targetUser.role
+        });
+      }
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
         status: HTTP_STATUS.FORBIDDEN,
@@ -776,6 +1081,13 @@ const unlockAccount = async (req, res) => {
 
     // Pass admin role for authorization check
     const user = await User.unlockAccount(id_card, req.user.id_card, req.user.role);
+
+    if (isDevelopment) {
+      console.log('[DEV ADMIN] Account unlocked:', {
+        id_card: user.id_card,
+        unlockedBy: req.user.id_card
+      });
+    }
 
     // Send notification
     await sendAccountUnlockedNotification(
@@ -802,6 +1114,10 @@ const unlockAccount = async (req, res) => {
 
   } catch (error) {
     console.error('[ADMIN] Unlock account error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV ADMIN] Full error:', error);
+    }
     
     if (error.message === 'User not found') {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
@@ -832,7 +1148,7 @@ const unlockAccount = async (req, res) => {
       success: false,
       status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       message: ERROR_MESSAGES.UNLOCK_FAILED,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: isDevelopment ? error.message : undefined
     });
   }
 };
@@ -842,8 +1158,19 @@ const unlockAccount = async (req, res) => {
  */
 const getLockedAccounts = async (req, res) => {
   try {
+    if (isDevelopment) {
+      console.log('[DEV ADMIN] Get locked accounts request by:', {
+        adminId: req.user.id,
+        adminRole: req.user.role,
+        adminIdCard: req.user.id_card
+      });
+    }
+
     // Check authorization
     if (!req.user.isAdmin) {
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Unauthorized - not admin');
+      }
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
         status: HTTP_STATUS.FORBIDDEN,
@@ -852,6 +1179,10 @@ const getLockedAccounts = async (req, res) => {
     }
 
     const lockedAccounts = await User.getLockedAccounts();
+    
+    if (isDevelopment) {
+      console.log('[DEV ADMIN] All locked accounts:', lockedAccounts.length);
+    }
     
     // Filter based on user's role
     let filteredAccounts = lockedAccounts;
@@ -863,6 +1194,10 @@ const getLockedAccounts = async (req, res) => {
               account.reportsTo && 
               account.reportsTo._id.toString() === req.user._id.toString();
       });
+      
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Filtered for LINE_MANAGER:', filteredAccounts.length);
+      }
     }
     
     return res.status(HTTP_STATUS.OK).json({
@@ -878,11 +1213,16 @@ const getLockedAccounts = async (req, res) => {
     });
   } catch (error) {
     console.error('[ADMIN] Get locked accounts error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV ADMIN] Full error:', error);
+    }
+    
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       message: ERROR_MESSAGES.RETRIEVAL_FAILED,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: isDevelopment ? error.message : undefined
     });
   }
 };
@@ -894,8 +1234,21 @@ const lockAccount = async (req, res) => {
   try {
     const { id_card, reason } = req.body;
     
+    if (isDevelopment) {
+      console.log('[DEV ADMIN] Lock account request:', {
+        adminId: req.user.id,
+        adminRole: req.user.role,
+        adminIdCard: req.user.id_card,
+        targetIdCard: id_card,
+        reason
+      });
+    }
+
     // Check authorization
     if (!req.user.isAdmin) {
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Unauthorized - not admin');
+      }
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
         status: HTTP_STATUS.FORBIDDEN,
@@ -905,6 +1258,9 @@ const lockAccount = async (req, res) => {
 
     const targetUser = await User.findOne({ id_card }).populate('reportsTo');
     if (!targetUser) {
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Target user not found:', id_card);
+      }
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
         status: HTTP_STATUS.NOT_FOUND,
@@ -912,8 +1268,20 @@ const lockAccount = async (req, res) => {
       });
     }
     
+    if (isDevelopment) {
+      console.log('[DEV ADMIN] Target user found:', {
+        id: targetUser._id,
+        id_card: targetUser.id_card,
+        role: targetUser.role,
+        email: targetUser.email
+      });
+    }
+    
     // CRITICAL: Prevent users from locking their own accounts
     if (targetUser._id.toString() === req.user.id) {
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Self-lock attempt blocked');
+      }
       return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
         status: HTTP_STATUS.BAD_REQUEST,
@@ -924,6 +1292,9 @@ const lockAccount = async (req, res) => {
     
     // CRITICAL: Prevent locking other SUPER_ADMIN accounts (unless you're also SUPER_ADMIN)
     if (targetUser.role === 'SUPER_ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Non-SUPER_ADMIN trying to lock SUPER_ADMIN');
+      }
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
         status: HTTP_STATUS.FORBIDDEN,
@@ -934,6 +1305,13 @@ const lockAccount = async (req, res) => {
     
     // Check if admin can manage this user
     if (!canAdminManageUser(req.user, targetUser) && req.user.role !== 'SUPER_ADMIN') {
+      if (isDevelopment) {
+        console.log('[DEV ADMIN] Insufficient permissions:', {
+          adminRole: req.user.role,
+          targetRole: targetUser.role,
+          reportsTo: targetUser.reportsTo
+        });
+      }
       return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
         status: HTTP_STATUS.FORBIDDEN,
@@ -948,17 +1326,30 @@ const lockAccount = async (req, res) => {
       reason || 'Manually locked by administrator'
     );
 
+    if (isDevelopment) {
+      console.log('[DEV ADMIN] Account locked successfully:', {
+        id_card: user.id_card,
+        lockedAt: user.lockedAt,
+        lockedReason: user.lockedReason
+      });
+    }
+
     // Send notifications
     const recipients = await getNotificationRecipients(user);
     const notificationEmails = recipients.map(r => r.email);
     
     if (notificationEmails.length) {
+      if (isDevelopment) {
+        console.log('[DEV NOTIFICATION] Sending lock notifications to:', notificationEmails);
+      }
       await sendAccountLockedNotification(user, notificationEmails, {
         lockedBy: `${req.user.first_name} ${req.user.last_name}`,
         lockedByRole: req.user.role,
         reason: reason || 'Manually locked by administrator'
       });
-      console.log(`[ADMIN] Manual lock notification sent to ${notificationEmails.length} recipient(s)`);
+      if (isDevelopment) {
+        console.log(`[DEV NOTIFICATION] Sent to ${notificationEmails.length} recipient(s)`);
+      }
     }
 
     return res.status(HTTP_STATUS.OK).json({
@@ -986,6 +1377,10 @@ const lockAccount = async (req, res) => {
   } catch (error) {
     console.error('[ADMIN] Lock account error:', error.message);
     
+    if (isDevelopment) {
+      console.error('[DEV ADMIN] Full error:', error);
+    }
+    
     if (error.message === 'User not found') {
       return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
@@ -1006,7 +1401,7 @@ const lockAccount = async (req, res) => {
       success: false,
       status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
       message: ERROR_MESSAGES.LOCK_FAILED,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: isDevelopment ? error.message : undefined
     });
   }
 };
