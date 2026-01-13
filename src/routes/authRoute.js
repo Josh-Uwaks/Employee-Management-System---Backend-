@@ -14,9 +14,6 @@ const {
 const { authMiddleware } = require('../middleware/auth.middleware');
 const { 
   isSuperAdmin, 
-  isLineManager, 
-  isAdmin, 
-  selfManagerOrSuperAdmin,
   lineManagerOrSuperAdmin 
 } = require('../middleware/role.middleware');
 

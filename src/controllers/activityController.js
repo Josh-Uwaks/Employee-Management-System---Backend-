@@ -441,6 +441,7 @@ const getAllActivities = async (req, res) => {
         page, 
         limit 
       });
+      console.log('[DEV] User role:', req.user.role, 'User ID:', req.user._id);
     }
 
     // Always filter out activities with null or non-existent users
@@ -489,27 +490,26 @@ const getAllActivities = async (req, res) => {
       userFilter.branch = branch;
     }
 
-    if (isDevelopment) {
-      console.log('[DEV] User filter:', userFilter);
-    }
-
-    // Only query users if we have filters
-    let userIds = null;
-    if (Object.keys(userFilter).length > 0) {
-      const users = await User.find(userFilter).select('_id');
+    // ================================================
+    // LINE_MANAGER RESTRICTION: Only direct reports
+    // ================================================
+    if (req.user.role === 'LINE_MANAGER') {
+      // Get all STAFF that report to this LINE_MANAGER
+      const directReports = await User.find({ 
+        reportsTo: req.user._id,
+        role: 'STAFF'
+      }).select('_id');
+      
       if (isDevelopment) {
-        console.log('[DEV] Found users matching filter:', users.length);
+        console.log('[DEV] LINE_MANAGER direct reports:', directReports.length);
+        console.log('[DEV] Direct report IDs:', directReports.map(r => r._id));
       }
-      if (users && users.length > 0) {
-        userIds = users.map(u => u._id);
-        filter.user = { $in: userIds };
-      } else if (users && users.length === 0) {
-        if (isDevelopment) {
-          console.log('[DEV] No users match filter, returning empty result');
-        }
+      
+      if (directReports.length === 0) {
+        // No direct reports, return empty result
         return res.status(200).json({
           success: true,
-          message: 'No activities found',
+          message: 'No activities found (no direct reports)',
           filters: {
             date: date || 'All dates',
             status: status || 'All statuses',
@@ -532,6 +532,58 @@ const getAllActivities = async (req, res) => {
           data: []
         });
       }
+      
+      // Only include activities from direct reports
+      const directReportIds = directReports.map(report => report._id);
+      filter.user = { $in: directReportIds };
+      
+      // Override any userFilter with direct reports filter
+      userFilter._id = { $in: directReportIds };
+      
+    } else if (req.user.role === 'SUPER_ADMIN') {
+      // SUPER_ADMIN can filter by region/branch normally
+      if (Object.keys(userFilter).length > 0) {
+        const users = await User.find(userFilter).select('_id');
+        if (isDevelopment) {
+          console.log('[DEV] Found users matching filter:', users.length);
+        }
+        if (users && users.length > 0) {
+          const userIds = users.map(u => u._id);
+          filter.user = { $in: userIds };
+        } else if (users && users.length === 0) {
+          if (isDevelopment) {
+            console.log('[DEV] No users match filter, returning empty result');
+          }
+          return res.status(200).json({
+            success: true,
+            message: 'No activities found',
+            filters: {
+              date: date || 'All dates',
+              status: status || 'All statuses',
+              region: region || 'All regions',
+              branch: branch || 'All branches'
+            },
+            stats: {
+              total: 0,
+              byStatus: { pending: 0, ongoing: 0, completed: 0 },
+              byRegion: {},
+              byBranch: {}
+            },
+            count: 0,
+            pagination: {
+              page: parseInt(page),
+              limit: parseInt(limit),
+              totalPages: 0,
+              totalItems: 0
+            },
+            data: []
+          });
+        }
+      }
+    }
+
+    if (isDevelopment) {
+      console.log('[DEV] Final database filter:', JSON.stringify(filter, null, 2));
     }
 
     // Calculate pagination
@@ -539,43 +591,45 @@ const getAllActivities = async (req, res) => {
     const total = await DailyActivity.countDocuments(filter);
 
     if (isDevelopment) {
-      console.log('[DEV] Final database filter:', JSON.stringify(filter, null, 2));
       console.log('[DEV] Expected total activities:', total);
       console.log('[DEV] Pagination:', { page, limit, skip });
     }
 
     const activities = await DailyActivity.find(filter)
-      .populate('user', 'id_card first_name last_name region branch department position')
+      .populate({
+        path: 'user',
+        select: 'id_card first_name last_name region branch department position role reportsTo',
+        populate: [
+          { path: 'department', select: 'name code' },
+          { path: 'reportsTo', select: 'id_card first_name last_name role' }
+        ]
+      })
       .sort({ date: -1, createdAt: 1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    // DEBUG: Check population results
-    if (isDevelopment) {
-      console.log('[DEV] Activities returned:', activities.length);
-      const nullUsers = activities.filter(a => !a.user);
-      console.log('[DEV] Activities with null user after populate:', nullUsers.length);
-      if (nullUsers.length > 0) {
-        console.log('[DEV] First null user activity ID:', nullUsers[0]?._id);
-      }
+    // Additional security check for LINE_MANAGER
+    let filteredActivities = activities;
+    if (req.user.role === 'LINE_MANAGER') {
+      filteredActivities = activities.filter(activity => {
+        if (!activity.user || !activity.user.reportsTo) return false;
+        
+        // Check if the user reports to this LINE_MANAGER
+        const reportsToId = activity.user.reportsTo._id || activity.user.reportsTo;
+        return reportsToId.toString() === req.user._id.toString();
+      });
       
-      console.log('[DEV] Sample activities (first 3):', 
-        activities.slice(0, 3).map(a => ({
-          id: a._id,
-          date: a.date,
-          user: a.user ? {
-            id: a.user._id,
-            name: `${a.user.first_name} ${a.user.last_name}`,
-            region: a.user.region,
-            branch: a.user.branch
-          } : null
-        }))
-      );
+      if (isDevelopment) {
+        console.log('[DEV] LINE_MANAGER post-filter:', {
+          before: activities.length,
+          after: filteredActivities.length
+        });
+      }
     }
 
     // Calculate admin statistics
     const stats = {
-      total,
+      total: req.user.role === 'LINE_MANAGER' ? filteredActivities.length : total,
       byStatus: {
         pending: 0,
         ongoing: 0,
@@ -585,7 +639,7 @@ const getAllActivities = async (req, res) => {
       byBranch: {}
     };
 
-    activities.forEach(activity => {
+    filteredActivities.forEach(activity => {
       // Update status counts
       if (activity.status === 'pending') stats.byStatus.pending++;
       else if (activity.status === 'ongoing') stats.byStatus.ongoing++;
@@ -609,7 +663,8 @@ const getAllActivities = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: activities.length > 0 ? 'All activities retrieved successfully' : 'No activities found',
+      message: filteredActivities.length > 0 ? 'Activities retrieved successfully' : 'No activities found',
+      role: req.user.role,
       filters: {
         date: date || 'All dates',
         status: status || 'All statuses',
@@ -617,14 +672,14 @@ const getAllActivities = async (req, res) => {
         branch: branch || 'All branches'
       },
       stats,
-      count: activities.length,
+      count: filteredActivities.length,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
         totalPages: Math.ceil(total / parseInt(limit)),
         totalItems: total
       },
-      data: activities
+      data: filteredActivities
     });
   } catch (error) {
     console.error('Admin Get All Activities Error:', error);
@@ -635,6 +690,7 @@ const getAllActivities = async (req, res) => {
     });
   }
 };
+
 
 const getActivitiesByUser = async (req, res) => {
   try {
@@ -647,7 +703,9 @@ const getActivitiesByUser = async (req, res) => {
         date: date,
         status: status,
         page: page,
-        limit: limit
+        limit: limit,
+        requesterRole: req.user.role,
+        requesterId: req.user._id
       });
     }
 
@@ -664,7 +722,10 @@ const getActivitiesByUser = async (req, res) => {
     }
 
     // Check if user exists
-    const user = await User.findById(id).select('id_card first_name last_name region branch department position');
+    const user = await User.findById(id)
+      .select('id_card first_name last_name region branch department position role reportsTo')
+      .populate('reportsTo', 'id_card first_name last_name role');
+    
     if (!user) {
       if (isDevelopment) {
         console.log('[DEV] User not found:', id);
@@ -673,6 +734,48 @@ const getActivitiesByUser = async (req, res) => {
         success: false,
         error: 'USER_NOT_FOUND',
         message: 'User not found'
+      });
+    }
+
+    // ================================================
+    // LINE_MANAGER AUTHORIZATION CHECK
+    // ================================================
+    if (req.user.role === 'LINE_MANAGER') {
+      // Check if the requested user is a direct report of this LINE_MANAGER
+      const isDirectReport = user.role === 'STAFF' && 
+                            user.reportsTo && 
+                            user.reportsTo._id.toString() === req.user._id.toString();
+      
+      if (!isDirectReport) {
+        if (isDevelopment) {
+          console.log('[DEV] LINE_MANAGER access denied:', {
+            requestedUserRole: user.role,
+            requestedUserReportsTo: user.reportsTo?._id,
+            managerId: req.user._id,
+            isDirectReport
+          });
+        }
+        return res.status(403).json({
+          success: false,
+          error: 'ACCESS_DENIED',
+          message: 'You can only view activities of staff that report directly to you',
+          details: {
+            userRole: user.role,
+            reportsTo: user.reportsTo ? {
+              id: user.reportsTo._id,
+              name: `${user.reportsTo.first_name} ${user.reportsTo.last_name}`
+            } : null
+          }
+        });
+      }
+    }
+    
+    // STAFF can only access their own activities
+    if (req.user.role === 'STAFF' && id !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: 'ACCESS_DENIED',
+        message: 'You can only view your own activities'
       });
     }
 
@@ -741,7 +844,14 @@ const getActivitiesByUser = async (req, res) => {
     }
 
     const activities = await DailyActivity.find(filter)
-      .populate('user', 'id_card first_name last_name region branch department position')
+      .populate({
+        path: 'user',
+        select: 'id_card first_name last_name region branch department position role reportsTo',
+        populate: [
+          { path: 'department', select: 'name code' },
+          { path: 'reportsTo', select: 'id_card first_name last_name role' }
+        ]
+      })
       .sort({ date: -1, createdAt: 1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -770,6 +880,11 @@ const getActivitiesByUser = async (req, res) => {
     res.status(200).json({
       success: true,
       message: activities.length > 0 ? 'User activities retrieved successfully' : 'No activities found for this user',
+      authorization: {
+        requesterRole: req.user.role,
+        isDirectReport: req.user.role === 'LINE_MANAGER' ? true : null,
+        canView: true
+      },
       userInfo: {
         id: user._id,
         name: `${user.first_name} ${user.last_name}`,
@@ -777,7 +892,13 @@ const getActivitiesByUser = async (req, res) => {
         region: user.region,
         branch: user.branch,
         department: user.department,
-        position: user.position
+        position: user.position,
+        role: user.role,
+        reportsTo: user.reportsTo ? {
+          id: user.reportsTo._id,
+          name: `${user.reportsTo.first_name} ${user.reportsTo.last_name}`,
+          role: user.reportsTo.role
+        } : null
       },
       filters: {
         date: date || 'All dates',
@@ -811,6 +932,7 @@ const getActivitiesByUser = async (req, res) => {
     });
   }
 };
+
 
 const deleteDailyActivity = async (req, res) => {
   try {

@@ -3,6 +3,9 @@ const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const { canUpdateUser, getAllowedUpdateFields, canUpdateField } = require('../utils/roleUtils');
 
+// ADD THIS IMPORT
+const Department = require('../models/department');
+
 const HTTP_STATUS = {
   OK: 200,
   CREATED: 201,
@@ -286,7 +289,10 @@ const updateUser = async (req, res) => {
       targetUser.id_card = req.body.id_card;
     }
 
-    // Handle department update
+    // Handle department update - Track if department is changing
+    let departmentChanged = false;
+    let oldDepartmentId = targetUser.department ? targetUser.department.toString() : null;
+    
     if (req.body.department !== undefined) {
       if (!mongoose.Types.ObjectId.isValid(req.body.department)) {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
@@ -296,7 +302,16 @@ const updateUser = async (req, res) => {
           details: 'Department must be a valid MongoDB ObjectId'
         });
       }
-      targetUser.department = req.body.department;
+      
+      const newDepartmentId = req.body.department;
+      
+      // Check if department is actually changing
+      if (!targetUser.department || targetUser.department.toString() !== newDepartmentId) {
+        departmentChanged = true;
+        console.log(`[DEPARTMENT CHANGE] User ${targetUser.id_card} department changing from ${oldDepartmentId} to ${newDepartmentId}`);
+      }
+      
+      targetUser.department = newDepartmentId;
     }
 
     // Handle role changes (SUPER_ADMIN only with validation)
@@ -332,11 +347,17 @@ const updateUser = async (req, res) => {
       // Handle reportsTo based on role
       if (req.body.role === 'STAFF') {
         if (!req.body.reportsTo && !targetUser.reportsTo) {
-          return res.status(HTTP_STATUS.BAD_REQUEST).json({
-            success: false,
-            status: HTTP_STATUS.BAD_REQUEST,
-            message: 'STAFF role requires a line manager (reportsTo)'
-          });
+          // For STAFF, automatically assign to department line manager if available
+          if (targetUser.department) {
+            const department = await Department.findById(targetUser.department);
+            
+            if (department && department.lineManager) {
+              targetUser.reportsTo = department.lineManager;
+              console.log(`[AUTO-ASSIGN] STAFF ${targetUser.id_card} automatically assigned to department line manager: ${department.lineManager}`);
+            } else {
+              console.log(`[WARNING] STAFF ${targetUser.id_card} has no line manager assigned and department has no line manager`);
+            }
+          }
         }
       } else {
         // SUPER_ADMIN or LINE_MANAGER should not report to anyone
@@ -398,6 +419,57 @@ const updateUser = async (req, res) => {
       }
     }
 
+    // ===========================================
+    // AUTO-ASSIGN LINE MANAGER WHEN DEPARTMENT CHANGES
+    // ===========================================
+    if (departmentChanged && targetUser.role === 'STAFF') {
+      console.log(`[AUTO-ASSIGN] Department changed for STAFF ${targetUser.id_card}, checking for department line manager...`);
+      
+      // Find the new department and its line manager
+      const newDepartment = await Department.findById(targetUser.department);
+      
+      if (newDepartment && newDepartment.lineManager) {
+        // Check if the line manager exists and is active
+        const lineManager = await User.findById(newDepartment.lineManager);
+        
+        if (lineManager && lineManager.is_active && (lineManager.role === 'LINE_MANAGER' || lineManager.role === 'SUPER_ADMIN')) {
+          // Auto-assign staff to the department's line manager
+          targetUser.reportsTo = newDepartment.lineManager;
+          console.log(`[AUTO-ASSIGN] Staff ${targetUser.id_card} automatically assigned to department line manager: ${lineManager.id_card} (${lineManager.first_name} ${lineManager.last_name})`);
+        } else {
+          console.log(`[WARNING] Department line manager (${newDepartment.lineManager}) is not active or not a valid manager`);
+          
+          // If line manager is invalid, find an active LINE_MANAGER in the same department
+          const activeLineManager = await User.findOne({
+            department: targetUser.department,
+            role: 'LINE_MANAGER',
+            is_active: true
+          });
+          
+          if (activeLineManager) {
+            targetUser.reportsTo = activeLineManager._id;
+            console.log(`[AUTO-ASSIGN] Staff ${targetUser.id_card} assigned to active LINE_MANAGER in department: ${activeLineManager.id_card}`);
+          } else {
+            console.log(`[WARNING] No active LINE_MANAGER found in department ${targetUser.department}`);
+          }
+        }
+      } else {
+        console.log(`[WARNING] Department ${targetUser.department} has no assigned line manager`);
+        
+        // Try to find any LINE_MANAGER in the same department
+        const departmentLineManager = await User.findOne({
+          department: targetUser.department,
+          role: 'LINE_MANAGER',
+          is_active: true
+        });
+        
+        if (departmentLineManager) {
+          targetUser.reportsTo = departmentLineManager._id;
+          console.log(`[AUTO-ASSIGN] Staff ${targetUser.id_card} assigned to LINE_MANAGER in department: ${departmentLineManager.id_card}`);
+        }
+      }
+    }
+
     // Update password if provided
     if (req.body.password) {
       // Check if user can update password
@@ -430,7 +502,7 @@ const updateUser = async (req, res) => {
       const validBranches = {
         'Lagos': ['Alimosho', 'HQ'],
         'Delta': ['Warri'],
-        'Osun': ['Osogbo']
+        'Osun': ['Osun']
       };
 
       if (!validRegions.includes(region)) {
@@ -656,7 +728,7 @@ const checkinUser = async (req, res) => {
     const validBranches = {
       'Lagos': ['Alimosho', 'HQ'],
       'Delta': ['Warri'],
-      'Osun': ['Osogbo']
+      'Osun': ['Osun']
     };
 
     if (!validRegions.includes(region)) {

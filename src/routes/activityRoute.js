@@ -15,7 +15,8 @@ const {
   isSuperAdmin, 
   isLineManager, 
   selfOrAdmin,
-  selfManagerOrSuperAdmin 
+  selfManagerOrSuperAdmin,
+  lineManagerDirectReportsOnly
 } = require('../middleware/role.middleware');
 
 // Validation middleware
@@ -191,6 +192,6 @@ router.delete('/:id', deleteDailyActivity);
 router.get('/all', isAdmin, adminFiltersRules, validate, getAllActivities);
 
 // GET activities by user (Admin only - for specific users)
-router.get('/user/:id', selfManagerOrSuperAdmin, userActivitiesRules, validate, getActivitiesByUser);
+router.get('/user/:id', lineManagerDirectReportsOnly, userActivitiesRules, validate, getActivitiesByUser);
 
 module.exports = router;

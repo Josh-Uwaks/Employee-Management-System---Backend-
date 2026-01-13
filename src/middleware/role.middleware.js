@@ -154,6 +154,83 @@ const lineManagerOwnStaffOrSuperAdmin = (req, res, next) => {
   });
 };
 
+// Add this function to role.middleware.js
+/**
+ * LINE_MANAGER can only access their own direct reports
+ * Validates that the target user reports to the requesting LINE_MANAGER
+ */
+const lineManagerDirectReportsOnly = async (req, res, next) => {
+  if (!req.user || !req.user.role) {
+    return res.status(HTTP_STATUS.UNAUTHORIZED).json({
+      success: false,
+      message: 'Authentication required'
+    });
+  }
+
+  const targetId = req.params.id;
+  
+  // SUPER_ADMIN can access anyone
+  if (req.user.role === 'SUPER_ADMIN') {
+    return next();
+  }
+
+  // LINE_MANAGER logic
+  if (req.user.role === 'LINE_MANAGER') {
+    if (!targetId) {
+      // For routes without target ID (like getAllActivities), allow but controller will filter
+      return next();
+    }
+    
+    // Validate target user exists and reports to this LINE_MANAGER
+    try {
+      const User = require('../models/staff'); // Need to import model
+      const targetUser = await User.findById(targetId).select('reportsTo role');
+      
+      if (!targetUser) {
+        return res.status(HTTP_STATUS.NOT_FOUND).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Check if target is a STAFF that reports to this LINE_MANAGER
+      const isDirectReport = targetUser.role === 'STAFF' && 
+                            targetUser.reportsTo && 
+                            targetUser.reportsTo.toString() === req.user._id.toString();
+      
+      if (!isDirectReport) {
+        return res.status(HTTP_STATUS.FORBIDDEN).json({
+          success: false,
+          message: 'You can only access activities of staff that report directly to you',
+          userRole: req.user.role,
+          targetRole: targetUser.role,
+          targetReportsTo: targetUser.reportsTo
+        });
+      }
+      
+      return next();
+    } catch (error) {
+      console.error('Middleware error:', error);
+      return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: 'Server error during authorization check'
+      });
+    }
+  }
+
+  // STAFF can only access themselves
+  if (req.user.role === 'STAFF' && targetId && targetId === req.user.id) {
+    return next();
+  }
+
+  return res.status(HTTP_STATUS.FORBIDDEN).json({
+    success: false,
+    message: 'Access denied',
+    userRole: req.user.role
+  });
+};
+
+
 module.exports = {
   checkRoles,
   isAdmin,
@@ -163,5 +240,6 @@ module.exports = {
   selfOrAdmin,
   selfManagerOrSuperAdmin,
   lineManagerOrSuperAdmin,
+  lineManagerDirectReportsOnly,
   lineManagerOwnStaffOrSuperAdmin
 };
