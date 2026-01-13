@@ -22,6 +22,7 @@ const {
 // Validation middleware
 const validate = require('../middleware/validate.middleware');
 const { body, query, param } = require('express-validator');
+const mongoose = require('mongoose');
 
 // Validation rules
 const createActivityRules = [
@@ -95,6 +96,19 @@ const adminFiltersRules = [
       const iso8601Regex = /^\d{4}-\d{2}-\d{2}$/;
       if (!iso8601Regex.test(value)) {
         throw new Error('Date must be in valid ISO8601 format (YYYY-MM-DD)');
+      }
+      return true;
+    }),
+    query('user')
+    .optional()
+    .custom((value) => {
+      // Allow empty string, 'all', or null
+      if (!value || value.trim() === '' || value === 'all' || value === 'null' || value === 'undefined') {
+        return true;
+      }
+      // If value is provided, validate it's a valid MongoDB ObjectId
+      if (!mongoose.Types.ObjectId.isValid(value)) {
+        throw new Error('Invalid user ID format');
       }
       return true;
     }),
