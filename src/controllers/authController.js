@@ -9,6 +9,11 @@ const {
   sendAccountLockedNotification, 
   sendAccountUnlockedNotification 
 } = require('../services/adminNotification');
+const { 
+  sendPasswordResetEmail,
+  sendPasswordResetConfirmationEmail,
+  sendPasswordChangeConfirmationEmail 
+} = require('../services/passwordResetEmail.service');
 
 // ===========================
 // Development Mode Check
@@ -461,6 +466,7 @@ const loginUser = async (req, res) => {
   }
 };
 
+
 /**
  * Register new user
  */
@@ -593,9 +599,13 @@ const registerUser = async (req, res) => {
         });
       }
 
+      // CHANGED: Allow STAFF to report to LINE_MANAGER or SUPER_ADMIN
       const manager = await User.findOne({
         _id: reportsTo,
-        role: 'LINE_MANAGER',
+        $or: [
+          { role: 'LINE_MANAGER' },
+          { role: 'SUPER_ADMIN' }
+        ],
         is_active: true
       });
 
@@ -606,7 +616,7 @@ const registerUser = async (req, res) => {
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
           status: HTTP_STATUS.BAD_REQUEST,
-          message: ERROR_MESSAGES.INVALID_MANAGER
+          message: 'Manager must be either LINE_MANAGER or SUPER_ADMIN'
         });
       }
 
@@ -616,6 +626,7 @@ const registerUser = async (req, res) => {
     if (role === 'LINE_MANAGER' || role === 'SUPER_ADMIN') {
       isAdmin = true;
       // SUPER_ADMIN cannot report to anyone
+      // LINE_MANAGER cannot report to anyone either
       finalReportsTo = null;
     }
 
@@ -721,7 +732,6 @@ const registerUser = async (req, res) => {
     });
   }
 };
-
 // ===========================
 // OTP Management Controllers
 // ===========================
@@ -1415,6 +1425,514 @@ const lockAccount = async (req, res) => {
   }
 };
 
+/**
+ * Request password reset
+ */
+const requestPasswordReset = async (req, res) => {
+  try {
+    const { id_card, email } = req.body;
+    
+    if (isDevelopment) {
+      console.log('[DEV PASSWORD RESET] Request:', { id_card, email });
+    }
+
+    // Validate required fields
+    if (!id_card && !email) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] No credentials provided');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'ID card or email is required'
+      });
+    }
+
+    // Find user by id_card or email
+    let user;
+    if (id_card) {
+      user = await User.findOne({ id_card });
+    } else {
+      user = await User.findOne({ email: email.toLowerCase() });
+    }
+    
+    if (!user) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] User not found');
+      }
+      // Don't reveal if user exists for security
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        status: HTTP_STATUS.OK,
+        message: 'If your account exists, a password reset email has been sent'
+      });
+    }
+
+    if (user.isLocked) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Account is locked');
+      }
+      return res.status(HTTP_STATUS.LOCKED).json({
+        success: false,
+        status: HTTP_STATUS.LOCKED,
+        message: 'Account is locked. Please contact administrator to unlock before resetting password.',
+        locked: true
+      });
+    }
+
+    // Generate reset token (6-digit code)
+    const resetToken = generateOTP();
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+    
+    await user.save();
+
+    if (isDevelopment) {
+      console.log('[DEV PASSWORD RESET] Generated token:', {
+        id_card: user.id_card,
+        email: user.email,
+        resetToken,
+        expiresAt: user.resetPasswordExpiresAt
+      });
+    }
+
+    // Send password reset email
+    await sendPasswordResetEmail({
+      email: user.email,
+      first_name: user.first_name,
+      resetToken
+    });
+
+    if (isDevelopment) {
+      console.log('[DEV PASSWORD RESET] Reset email sent to:', user.email);
+    }
+
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      status: HTTP_STATUS.OK,
+      message: 'Password reset instructions sent to your email',
+      email: user.email
+    });
+
+  } catch (error) {
+    console.error('[AUTH] Password reset request error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV PASSWORD RESET] Full error:', error);
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      message: 'Failed to process password reset request',
+      error: isDevelopment ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Verify password reset token
+ */
+const verifyResetToken = async (req, res) => {
+  try {
+    const { id_card, token } = req.body;
+    
+    if (isDevelopment) {
+      console.log('[DEV PASSWORD RESET] Verify token:', { id_card, token });
+    }
+
+    // Validate required fields
+    if (!id_card || !token) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Missing required fields');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'ID card and reset token are required'
+      });
+    }
+
+    const user = await User.findOne({ id_card });
+    
+    if (!user) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] User not found:', id_card);
+      }
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        status: HTTP_STATUS.NOT_FOUND,
+        message: 'Invalid ID card or reset token'
+      });
+    }
+
+    if (user.isLocked) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Account is locked');
+      }
+      return res.status(HTTP_STATUS.LOCKED).json({
+        success: false,
+        status: HTTP_STATUS.LOCKED,
+        message: 'Account is locked. Please contact administrator.',
+        locked: true
+      });
+    }
+
+    // Validate token format
+    if (!/^\d{6}$/.test(token)) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Invalid token format:', token);
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'Reset token must be a 6-digit number'
+      });
+    }
+
+    if (isDevelopment) {
+      console.log('[DEV PASSWORD RESET] Checking token:', {
+        storedToken: user.resetPasswordToken,
+        providedToken: token,
+        expiresAt: user.resetPasswordExpiresAt,
+        currentTime: Date.now()
+      });
+    }
+
+    // Check if token matches and is not expired
+    if (
+      !user.resetPasswordToken ||
+      user.resetPasswordToken !== token ||
+      !user.resetPasswordExpiresAt ||
+      user.resetPasswordExpiresAt < Date.now()
+    ) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Invalid or expired token');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'Invalid or expired reset token'
+      });
+    }
+
+    // Token is valid
+    if (isDevelopment) {
+      console.log('[DEV PASSWORD RESET] Token verified successfully');
+    }
+
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      status: HTTP_STATUS.OK,
+      message: 'Reset token verified successfully',
+      tokenValid: true,
+      email: user.email
+    });
+
+  } catch (error) {
+    console.error('[AUTH] Reset token verification error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV PASSWORD RESET] Full error:', error);
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      message: 'Failed to verify reset token',
+      error: isDevelopment ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Reset password with token
+ */
+const resetPassword = async (req, res) => {
+  try {
+    const { id_card, token, newPassword } = req.body;
+    
+    if (isDevelopment) {
+      console.log('[DEV PASSWORD RESET] Reset password:', { id_card, hasToken: !!token, hasNewPassword: !!newPassword });
+    }
+
+    // Validate required fields
+    if (!id_card || !token || !newPassword) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Missing required fields');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'ID card, reset token, and new password are required'
+      });
+    }
+
+    // Validate password length
+    if (newPassword.length < 6) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Password too short');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'Password must be at least 6 characters long'
+      });
+    }
+
+    const user = await User.findOne({ id_card });
+    
+    if (!user) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] User not found:', id_card);
+      }
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        status: HTTP_STATUS.NOT_FOUND,
+        message: 'Invalid ID card or reset token'
+      });
+    }
+
+    if (user.isLocked) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Account is locked');
+      }
+      return res.status(HTTP_STATUS.LOCKED).json({
+        success: false,
+        status: HTTP_STATUS.LOCKED,
+        message: 'Account is locked. Please contact administrator.',
+        locked: true
+      });
+    }
+
+    // Validate token format
+    if (!/^\d{6}$/.test(token)) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Invalid token format:', token);
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'Reset token must be a 6-digit number'
+      });
+    }
+
+    if (isDevelopment) {
+      console.log('[DEV PASSWORD RESET] Verifying token for password reset:', {
+        storedToken: user.resetPasswordToken,
+        providedToken: token,
+        expiresAt: user.resetPasswordExpiresAt
+      });
+    }
+
+    // Check if token matches and is not expired
+    if (
+      !user.resetPasswordToken ||
+      user.resetPasswordToken !== token ||
+      !user.resetPasswordExpiresAt ||
+      user.resetPasswordExpiresAt < Date.now()
+    ) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] Invalid or expired token');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'Invalid or expired reset token'
+      });
+    }
+
+    // Check if new password is different from current password
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      if (isDevelopment) {
+        console.log('[DEV PASSWORD RESET] New password same as old password');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'New password cannot be the same as current password'
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // Update password and clear reset token
+    user.password = hashedPassword;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpiresAt = null;
+    user.loginAttempts = 0; // Reset login attempts on successful password reset
+    user.lastFailedLoginAt = null;
+    
+    await user.save();
+
+    if (isDevelopment) {
+      console.log('[DEV PASSWORD RESET] Password reset successfully for:', id_card);
+    }
+
+    // Send confirmation email
+    await sendPasswordResetConfirmationEmail({
+      email: user.email,
+      first_name: user.first_name
+    });
+
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      status: HTTP_STATUS.OK,
+      message: 'Password reset successfully. You can now login with your new password.'
+    });
+
+  } catch (error) {
+    console.error('[AUTH] Reset password error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV PASSWORD RESET] Full error:', error);
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      message: 'Failed to reset password',
+      error: isDevelopment ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Change password (authenticated user)
+ */
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+    
+    if (isDevelopment) {
+      console.log('[DEV CHANGE PASSWORD] Request from user:', {
+        userId: req.user.id,
+        id_card: req.user.id_card,
+        hasCurrentPassword: !!currentPassword,
+        hasNewPassword: !!newPassword
+      });
+    }
+
+    // Validate required fields
+    if (!currentPassword || !newPassword) {
+      if (isDevelopment) {
+        console.log('[DEV CHANGE PASSWORD] Missing required fields');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'Current password and new password are required'
+      });
+    }
+
+    // Validate password length
+    if (newPassword.length < 6) {
+      if (isDevelopment) {
+        console.log('[DEV CHANGE PASSWORD] New password too short');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'New password must be at least 6 characters long'
+      });
+    }
+
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      if (isDevelopment) {
+        console.log('[DEV CHANGE PASSWORD] User not found:', userId);
+      }
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        status: HTTP_STATUS.NOT_FOUND,
+        message: 'User not found'
+      });
+    }
+
+    if (user.isLocked) {
+      if (isDevelopment) {
+        console.log('[DEV CHANGE PASSWORD] Account is locked');
+      }
+      return res.status(HTTP_STATUS.LOCKED).json({
+        success: false,
+        status: HTTP_STATUS.LOCKED,
+        message: 'Account is locked. Please contact administrator.',
+        locked: true
+      });
+    }
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      if (isDevelopment) {
+        console.log('[DEV CHANGE PASSWORD] Current password incorrect');
+      }
+      return res.status(HTTP_STATUS.UNAUTHORIZED).json({
+        success: false,
+        status: HTTP_STATUS.UNAUTHORIZED,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    // Check if new password is different from current password
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      if (isDevelopment) {
+        console.log('[DEV CHANGE PASSWORD] New password same as current password');
+      }
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: 'New password cannot be the same as current password'
+      });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // Update password
+    user.password = hashedPassword;
+    user.loginAttempts = 0; // Reset login attempts on successful password change
+    user.lastFailedLoginAt = null;
+    
+    await user.save();
+
+    if (isDevelopment) {
+      console.log('[DEV CHANGE PASSWORD] Password changed successfully for:', user.id_card);
+    }
+
+    // Send confirmation email
+    await sendPasswordChangeConfirmationEmail({
+      email: user.email,
+      first_name: user.first_name
+    });
+
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      status: HTTP_STATUS.OK,
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+    console.error('[AUTH] Change password error:', error.message);
+    
+    if (isDevelopment) {
+      console.error('[DEV CHANGE PASSWORD] Full error:', error);
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      status: HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      message: 'Failed to change password',
+      error: isDevelopment ? error.message : undefined
+    });
+  }
+};
+
 // ===========================
 // Export Controllers
 // ===========================
@@ -1426,5 +1944,9 @@ module.exports = {
   checkOtpStatus,
   unlockAccount,
   getLockedAccounts,
-  lockAccount
+  lockAccount,
+  requestPasswordReset,
+  verifyResetToken,
+  resetPassword,
+  changePassword
 };

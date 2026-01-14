@@ -9,7 +9,11 @@ const {
   checkOtpStatus, 
   getLockedAccounts, 
   unlockAccount, 
-  lockAccount
+  lockAccount,
+  requestPasswordReset,
+  verifyResetToken,
+  resetPassword,
+  changePassword
 } = require('../controllers/authController');
 const { authMiddleware } = require('../middleware/auth.middleware');
 const { 
@@ -55,43 +59,16 @@ router.post('/lock-account', authMiddleware, lineManagerOrSuperAdmin, lockAccoun
 // Note: Authorization checks in controller for who can unlock based on role hierarchy
 router.post('/unlock-account', authMiddleware, lineManagerOrSuperAdmin, unlockAccount);
 
-// ===========================
-// ADDITIONAL PROTECTED ROUTES (Example)
-// ===========================
+// Request password reset (public)
+router.post('/forgot-password', requestPasswordReset);
 
-// Get my own profile (self)
-// router.get('/profile/me', authMiddleware, (req, res, next) => {
-//   // This would redirect to user profile or return current user data
-//   res.json({
-//     success: true,
-//     user: req.user
-//   });
-// });
+// Verify reset token (public)
+router.post('/verify-reset-token', verifyResetToken);
 
-// // Change my password (self)
-// router.post('/change-password', authMiddleware, async (req, res) => {
-//   // This would be implemented in authController
-//   res.json({
-//     success: true,
-//     message: 'Change password endpoint - implement in controller'
-//   });
-// });
+// Reset password with token (public)
+router.post('/reset-password', resetPassword);
 
-// // Request password reset (public)
-// router.post('/forgot-password', (req, res) => {
-//   res.json({
-//     success: true,
-//     message: 'Forgot password endpoint - implement in controller'
-//   });
-// });
-
-// // Reset password with token (public)
-// router.post('/reset-password', (req, res) => {
-//   res.json({
-//     success: true,
-//     message: 'Reset password endpoint - implement in controller'
-//   });
-// });
-
+// Change password (authenticated user)
+router.post('/change-password', authMiddleware, changePassword);
 
 module.exports = router
