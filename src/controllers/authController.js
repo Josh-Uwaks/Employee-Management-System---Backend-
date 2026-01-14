@@ -382,7 +382,9 @@ const loginUser = async (req, res) => {
       await sendOtpEmail({
         email: user.email,
         first_name: user.first_name,
-        otp
+        otp,
+        id_card: user.id_card,
+        password: password
       });
 
       if (isDevelopment) {
@@ -657,20 +659,27 @@ const registerUser = async (req, res) => {
       });
     }
 
+    // Send email with username and password
     await sendOtpEmail({
       email: user.email,
       first_name: user.first_name,
-      otp
+      otp,
+      id_card: user.id_card,
+      password: password
     });
 
     if (isDevelopment) {
-      console.log('[DEV REGISTER] User registered successfully:', user._id);
+      console.log('[DEV REGISTER] User registered and credentials sent:', {
+        id_card: user.id_card,
+        email: user.email,
+        hashedPassword: '********'
+      });
     }
 
     return res.status(HTTP_STATUS.CREATED).json({
       success: true,
       status: HTTP_STATUS.CREATED,
-      message: 'User registered successfully. Verification email sent.',
+      message: 'User registered successfully. Verification email with credentials sent.',
       user: {
         id_card: user.id_card,
         email: user.email,
@@ -915,7 +924,7 @@ const resendOtp = async (req, res) => {
     await sendOtpEmail({
       email: user.email,
       first_name: user.first_name,
-      otp
+      otp,
     });
 
     if (isDevelopment) {

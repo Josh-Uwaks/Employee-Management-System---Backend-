@@ -12,10 +12,11 @@ const transporter = nodemailer.createTransport({
 
 const sendEmail = async ({to, subject, html}) => {
     const mailOptions = {
-        from: `"Daily Monitoring System" <${process.env.SMTP_USER}>`,
+        from: `"Kadick Daily Monitoring System" <${process.env.SMTP_FROM_EMAIL || 'no-reply@kadickintegrated.com'}>`,
         to,
         subject,
-        html
+        html,
+        replyTo: 'no-reply@kadickintegrated.com'
     };
     
     try {  

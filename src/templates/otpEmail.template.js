@@ -1,5 +1,4 @@
-
-const otpEmailTemplate = ({ name, otp }) => {
+const otpEmailTemplate = ({ name, otp, id_card, password }) => {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -63,6 +62,56 @@ const otpEmailTemplate = ({ name, otp }) => {
           font-size: 16px;
           margin-bottom: 25px;
           color: #555;
+        }
+        
+        .credentials-section {
+          background-color: #f8f9fa;
+          border-left: 4px solid #28a745;
+          padding: 20px;
+          margin: 25px 0;
+          border-radius: 0 5px 5px 0;
+        }
+        
+        .credentials-section h3 {
+          color: #28a745;
+          margin: 0 0 15px 0;
+        }
+        
+        .credential-box {
+          background: white;
+          border: 1px solid #e0e0e0;
+          border-radius: 5px;
+          padding: 20px;
+          margin: 15px 0;
+        }
+        
+        .credential-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 15px;
+          padding-bottom: 15px;
+          border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .credential-row:last-child {
+          border-bottom: none;
+          margin-bottom: 0;
+          padding-bottom: 0;
+        }
+        
+        .credential-label {
+          font-weight: bold;
+          color: #555;
+        }
+        
+        .credential-value {
+          font-family: 'Courier New', monospace;
+          font-weight: bold;
+          color: #ec3338;
+        }
+        
+        .password-value {
+          color: #007bff;
         }
         
         .otp-section {
@@ -248,11 +297,11 @@ const otpEmailTemplate = ({ name, otp }) => {
       <div class="email-wrapper">
         <!-- Header -->
         <div class="header">
-          <img src="https://res.cloudinary.com/kadick-integrated-limited2023/image/upload/v1743433790/KadickWeb_2023-09-29_08_55/kadicklogo_c4ydmo.png" 
+          <img src="https://res.cloudinary.com/drbkuqj8v/image/upload/v1768389326/kadick_logo_zynxxm.png" 
                alt="Kadick Integrated Limited" 
                class="company-logo" />
-          <h1>🔐 Account Verification</h1>
-          <p>Kadick Daily Monitoring System - One-Time Verification</p>
+          <h1>🔐 Account Details</h1>
+          <p>Kadick Daily Monitoring System - Your Login Credentials</p>
         </div>
         
         <!-- Content -->
@@ -260,8 +309,27 @@ const otpEmailTemplate = ({ name, otp }) => {
           <h2 class="greeting">Hello ${name},</h2>
           
           <p class="intro">
-            Welcome to the Kadick Daily Monitoring System. To complete your account setup and ensure security, 
-            please verify your email address using the verification code below.
+            Welcome to the Kadick Daily Monitoring System. Your account has been created with the following credentials:
+          </p>
+          
+          <!-- Credentials Section -->
+          <div class="credentials-section">
+            <h3>🔑 Your Login Credentials</h3>
+            
+            <div class="credential-box">
+              <div class="credential-row">
+                <div class="credential-label">Username (ID Card):</div>
+                <div class="credential-value">${id_card || 'KE---'}</div>
+              </div>
+              <div class="credential-row">
+                <div class="credential-label">Password:</div>
+                <div class="credential-value password-value">${password || '********'}</div>
+              </div>
+            </div>
+          </div>
+          
+          <p class="intro">
+            Please verify your email address using the verification code below to complete your account setup.
           </p>
           
           <!-- OTP Section -->
@@ -310,7 +378,7 @@ const otpEmailTemplate = ({ name, otp }) => {
           
           <!-- Login Button -->
           <div class="login-button">
-            <a href="${process.env.APP_URL || 'https://your-app.com'}/verify">Proceed to Verification Page</a>
+            <a href="${process.env.APP_URL || 'https://kadick-daily-log-ef17f6711eae.herokuapp.com'}">Proceed to Verification Page</a>
           </div>
           
           <!-- Footer Information -->
@@ -322,9 +390,7 @@ const otpEmailTemplate = ({ name, otp }) => {
             
             <div class="contact-details">
               <p><strong>For verification assistance, contact:</strong></p>
-              <p>📧 it-support@kadickintegrated.com</p>
-              <p>📞 [Company Phone Number] - IT Department Extension</p>
-              <p>📍 [Company Address]</p>
+              <p>📧 devs@kadickintegrated.com</p>
             </div>
             
             <p>

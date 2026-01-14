@@ -177,7 +177,7 @@ const sendAccountUnlockedNotification = async (user, unlockedByAdmin) => {
             </div>
             
             <div style="text-align: center; margin-top: 30px;">
-              <a href="${process.env.APP_URL || 'https://your-app.com'}/login" 
+              <a href="${process.env.APP_URL || 'https://kadick-daily-log-ef17f6711eae.herokuapp.com'}" 
                  style="background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
                 Login to Your Account
               </a>
