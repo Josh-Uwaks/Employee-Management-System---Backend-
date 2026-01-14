@@ -22,7 +22,8 @@ connectDB();
 ========================= */
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://kadick-official-log-monitor-9cdf4c4d3c69.herokuapp.com'
+  'https://kadick-official-log-monitor-9cdf4c4d3c69.herokuapp.com',
+  'https://kadick-daily-log-ef17f6711eae.herokuapp.com'
   // 'https://app.kadickintegrated.com'
 ];
 
